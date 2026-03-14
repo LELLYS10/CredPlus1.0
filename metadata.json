@@ -1,5 +1,5 @@
 {
-  "name": "Emprestimo 1.0",
-  "description": "Uma aplicação simples e eficiente para gestão de empréstimos pessoais, permitindo o acompanhamento de pagamentos, juros e status de cada transação.",
+  "name": "CREDPLUS",
+  "description": "Sistema completo para gestão de empréstimos, clientes e cobranças.",
   "requestFramePermissions": []
 }

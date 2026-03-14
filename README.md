@@ -1,20 +1,29 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Sistema de Gestão de Empréstimos - Dilsinho
 
-# Run and deploy your AI Studio app
+Este é um sistema completo para gestão de empréstimos, clientes e pagamentos, integrado com Supabase.
 
-This contains everything you need to run your app locally.
+## Funcionalidades
 
-View your app in AI Studio: https://ai.studio/apps/8839d0d0-66f2-49e1-bbd4-f05dc13f42fe
+- Gestão de Clientes
+- Gestão de Empréstimos e Parcelas
+- Controle de Pagamentos
+- Painel Administrativo (Master)
+- Relatórios e Estatísticas
+- Assistente de IA
 
-## Run Locally
+## Tecnologias
 
-**Prerequisites:**  Node.js
+- React + TypeScript
+- Tailwind CSS
+- Supabase (Auth & Database)
+- Lucide React (Icons)
+- Framer Motion (Animations)
 
+## Configuração
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. Clone o repositório
+2. Instale as dependências: `npm install`
+3. Configure as variáveis de ambiente no `.env`:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+4. Inicie o servidor: `npm run dev`
