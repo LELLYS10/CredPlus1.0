@@ -46,14 +46,14 @@ const Auth: React.FC<AuthProps> = ({ onSession }) => {
         if (!profile && isMaster) {
           profile = {
             id: crypto.randomUUID(),
-            user_id: user.id,
+            userId: user.id,
             email: cleanEmail,
             role: 'master',
             status: 'ativo',
             plan: 'mensal',
-            billing_status: 'ok',
-            expires_at: null,
-            created_at: new Date().toISOString()
+            billingStatus: 'ok',
+            expiresAt: null,
+            createdAt: new Date().toISOString()
           };
           await supabaseService.saveProfile(profile);
         }
@@ -66,6 +66,7 @@ const Auth: React.FC<AuthProps> = ({ onSession }) => {
         onSession(session, profile);
       } 
       else if (authMode === 'signup') {
+        console.log('Auth: Starting signup for:', cleanEmail);
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: cleanEmail,
           password: password,
@@ -77,29 +78,38 @@ const Auth: React.FC<AuthProps> = ({ onSession }) => {
           }
         });
 
-        if (authError) throw authError;
+        if (authError) {
+          console.error('Auth: Signup error:', authError);
+          throw authError;
+        }
 
         const user = authData.user;
-        if (!user) throw new Error("Erro ao criar usuário.");
+        if (!user) {
+          console.error('Auth: No user returned after signup');
+          throw new Error("Erro ao criar usuário.");
+        }
 
+        console.log('Auth: Signup successful, user ID:', user.id);
         const isMaster = cleanEmail === MASTER_EMAIL;
         const newUser: any = {
-          user_id: user.id,
+          userId: user.id,
           email: cleanEmail,
           name: signupName.trim(),
           phone: signupPhone.trim(),
           role: isMaster ? 'master' : 'user',
           status: isMaster ? 'ativo' : 'pendente',
           plan: 'free',
-          billing_status: 'ok',
-          expires_at: null,
+          billingStatus: 'ok',
+          expiresAt: null,
         };
         
         try {
+          console.log('Auth: Saving profile for new user...');
           // Tenta salvar, mas se falhar por RLS, o Trigger do banco resolverá
           await supabaseService.saveProfile(newUser);
+          console.log('Auth: Profile saved successfully');
         } catch (saveErr) {
-          console.warn('Aviso: Perfil será criado via Trigger do Banco de Dados.', saveErr);
+          console.warn('Auth: Warning: Perfil será criado via Trigger do Banco de Dados.', saveErr);
         }
 
         setMessage('Cadastro realizado! Se o seu e-mail exigir confirmação, verifique sua caixa de entrada. Caso contrário, tente fazer login.');

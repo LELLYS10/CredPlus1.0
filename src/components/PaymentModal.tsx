@@ -16,7 +16,15 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ theme, loan, client, onConf
   const [capitalValueStr, setCapitalValueStr] = useState('');
   const [paymentDate, setPaymentDate] = useState(hojeBR());
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const paymentDateRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (errorMessage) {
+      const timer = setTimeout(() => setErrorMessage(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMessage]);
   
   const [newInterestFixedStr, setNewInterestFixedStr] = useState(formatToInputMask(loan.interestFixedAmount));
   const [nextDueDate, setNextDueDate] = useState(addMonthsPreservingDay(loan.dueDate, 1));
@@ -63,9 +71,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ theme, loan, client, onConf
 
   const handleConfirm = async () => {
     const totalValue = currentInterest + currentCapital;
-    if (totalValue <= 0) return alert("Informe o valor recebido.");
+    if (totalValue <= 0) {
+      setErrorMessage("Informe o valor recebido.");
+      return;
+    }
     
     setIsSubmitting(true);
+    setErrorMessage(null);
     try {
       // Passamos os dados para o App.tsx e esperamos o processamento
       await onConfirm({ 
@@ -76,15 +88,22 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ theme, loan, client, onConf
         newInterestFixedAmount: (opType === 'capital' || opType === 'both') ? parseBrazilianNumber(newInterestFixedStr) : undefined 
       });
       // O fechamento do modal é controlado pelo App.tsx após o sucesso
-    } catch (err) {
-      alert("Erro ao processar: " + (err as any).message);
-    } finally {
+    } catch (err: any) {
+      setErrorMessage(err.message || "Erro ao processar pagamento.");
       setIsSubmitting(false);
     }
   };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-[#0a1629]/95 backdrop-blur-2xl p-0 md:p-4 animate-in fade-in duration-300">
+      {errorMessage && (
+        <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[200] animate-bounce w-full px-4">
+          <div className="bg-red-600 text-white px-6 py-3 rounded-2xl shadow-[0_0_20px_rgba(220,38,38,0.5)] flex items-center gap-3 border-2 border-white/20 mx-auto max-w-xs">
+            <span className="text-lg shrink-0">❌</span>
+            <span className="font-black uppercase tracking-widest text-[9px] italic leading-tight">{errorMessage}</span>
+          </div>
+        </div>
+      )}
       <div className="w-full max-w-lg bg-[#0b1b35] border border-emerald-500/10 rounded-t-[40px] md:rounded-[40px] shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden animate-in slide-in-from-bottom-10 text-white">
         <div className="p-8 border-b border-emerald-500/5 flex justify-between items-start">
           <div>
@@ -153,7 +172,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ theme, loan, client, onConf
                    {summary.quitouCiclo ? (
                      <input ref={nextDueDateRef} type="text" className="bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-xl font-black text-emerald-400 tracking-tighter italic text-right px-3 py-1 outline-none w-36 transition-all focus:bg-emerald-500/30" value={nextDueDate} onChange={(e) => handleMaskedChange(e, nextDueDateRef, setNextDueDate)} maxLength={10} />
                    ) : (
-                     <p className="text-xl font-black text-emerald-400 tracking-tighter italic opacity-30">{loan.dueDate.replace(/-/g, '/')}</p>
+                     <p className="text-xl font-black text-emerald-400 tracking-tighter italic opacity-30">{(loan.dueDate || '').replace(/-/g, '/')}</p>
                    )}
                 </div>
              </div>

@@ -1,54 +1,55 @@
 export interface Client {
   id: string;
-  user_id: string;
+  userId: string;
   name: string;
   phone: string;
   cpf?: string;
   referredBy: string;
+  address?: string;
   notes?: string;
   documentImage?: string;
   createdAt: string;
-  deleted_at?: string | null;
+  deletedAt?: string | null;
 }
 
 export interface AppUser {
   id: string;
-  user_id: string;
+  userId: string;
   role: 'master' | 'user';
-  is_admin?: boolean;
+  isAdmin?: boolean;
   status: 'pendente' | 'ativo' | 'pausado' | 'negado' | 'bloqueado' | 'deletado';
-  billing_status: 'free' | 'ok' | 'late' | 'suspended' | 'overdue';
+  billingStatus: 'free' | 'ok' | 'late' | 'suspended' | 'overdue';
   plan: 'free' | 'mensal' | 'anual';
-  expires_at: string | null;
-  signup_fee_status?: 'unpaid' | 'paid';
-  signup_fee_paid_at?: string | null;
-  created_at: string;
+  expiresAt: string | null;
+  signupFeeStatus?: 'unpaid' | 'paid';
+  signupFeePaidAt?: string | null;
+  createdAt: string;
   email?: string;
   name?: string;
   phone?: string;
-  profile_image?: string;
-  approved_at?: string | null;
-  approved_by?: string | null;
-  webhook_url?: string;
-  telegram_chat_id?: string;
+  profileImage?: string;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  webhookUrl?: string;
+  telegramChatId?: string;
 }
 
 export interface Installment {
   id: string;
-  user_id: string;
-  loan_id: string;
-  client_id: string;
+  userId: string;
+  loanId: string;
+  clientId: string;
   number: number;
   capitalValue: number;
   interestValue: number;
   dueDate: string;
   status: 'pendente' | 'pago';
-  paid_at?: string | null;
+  paidAt?: string | null;
 }
 
 export interface Loan {
   id: string;
-  user_id: string;
+  userId: string;
   clientId: string;
   amount: number;
   originalAmount: number;
@@ -58,13 +59,15 @@ export interface Loan {
   dueDate: string;
   status: 'active' | 'paid' | 'overdue';
   loanType: 'recurrent' | 'installments';
+  interestRate: number;
+  totalInstallments?: number;
   statusBucket?: 'overdue' | 'today' | 'tomorrow' | 'active';
   installments?: Installment[];
 }
 
 export interface Payment {
   id: string;
-  user_id: string;
+  userId: string;
   loanId: string;
   clientId: string;
   amount: number;

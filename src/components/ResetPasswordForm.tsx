@@ -10,10 +10,12 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onSuccess }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(false);
 
     if (password.length < 6) {
       setError('A senha deve ter pelo menos 6 caracteres.');
@@ -33,8 +35,10 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onSuccess }) => {
 
       if (resetError) throw resetError;
 
-      alert('Senha atualizada com sucesso!');
-      onSuccess();
+      setSuccess(true);
+      setTimeout(() => {
+        onSuccess();
+      }, 2000);
     } catch (err: any) {
       setError(err.message || 'Erro ao atualizar senha.');
     } finally {
@@ -86,6 +90,12 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onSuccess }) => {
             {error && (
               <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl text-[10px] text-red-400 font-bold text-center italic animate-pulse">
                 {error}
+              </div>
+            )}
+
+            {success && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl text-[10px] text-emerald-400 font-bold text-center italic">
+                Senha atualizada com sucesso! Redirecionando...
               </div>
             )}
 

@@ -34,10 +34,11 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
     doc.text(`Data de emissão: ${new Date().toLocaleDateString('pt-BR')}`, 14, 45);
 
     // Section: EMPRÉSTIMOS REALIZADOS
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, 55, 196, 55);
     doc.setFont('helvetica', 'bold');
-    doc.text('━━━━━━━━━━━━━━━━━━', 14, 55);
-    doc.text('EMPRÉSTIMOS REALIZADOS', 14, 60);
-    doc.text('━━━━━━━━━━━━━━━━━━', 14, 65);
+    doc.text('EMPRÉSTIMOS REALIZADOS', 14, 61);
+    doc.line(14, 65, 196, 65);
 
     doc.setFont('helvetica', 'normal');
     let currentY = 75;
@@ -52,10 +53,10 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
 
     // Section: HISTÓRICO DE PAGAMENTOS
     if (currentY > 250) { doc.addPage(); currentY = 20; }
+    doc.line(14, currentY, 196, currentY);
     doc.setFont('helvetica', 'bold');
-    doc.text('━━━━━━━━━━━━━━━━━━', 14, currentY);
-    doc.text('HISTÓRICO DE PAGAMENTOS', 14, currentY + 5);
-    doc.text('━━━━━━━━━━━━━━━━━━', 14, currentY + 10);
+    doc.text('HISTÓRICO DE PAGAMENTOS', 14, currentY + 6);
+    doc.line(14, currentY + 10, 196, currentY + 10);
     currentY += 20;
 
     // Group by year
@@ -75,7 +76,7 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
       paymentsByYear[year].forEach(p => {
         if (currentY > 270) { doc.addPage(); currentY = 20; }
         doc.setFont('helvetica', 'normal');
-        const dateStr = p.date.replace(/-/g, '/');
+        const dateStr = (p.date || '').replace(/-/g, '/');
         const typeStr = p.type === 'interest' ? 'Juros' : 'Capital';
         
         // Find installment number if applicable
@@ -99,10 +100,10 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
 
     // Section: RESUMO DO CONTRATO
     if (currentY > 240) { doc.addPage(); currentY = 20; }
+    doc.line(14, currentY, 196, currentY);
     doc.setFont('helvetica', 'bold');
-    doc.text('━━━━━━━━━━━━━━━━━━', 14, currentY);
-    doc.text('RESUMO DO CONTRATO', 14, currentY + 5);
-    doc.text('━━━━━━━━━━━━━━━━━━', 14, currentY + 10);
+    doc.text('RESUMO DO CONTRATO', 14, currentY + 6);
+    doc.line(14, currentY + 10, 196, currentY + 10);
     currentY += 20;
 
     const totalLent = clientLoans.reduce((acc, l) => acc + l.originalAmount, 0);
@@ -121,7 +122,7 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
     doc.setFont('courier', 'bold');
     doc.text(formatCurrency(activeBalance), 50, currentY + 21);
 
-    doc.save(`Extrato_${client.name.replace(/\s+/g, '_')}.pdf`);
+    doc.save(`Extrato_${(client.name || 'Cliente').replace(/\s+/g, '_')}.pdf`);
   };
 
   return (

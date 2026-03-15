@@ -38,6 +38,7 @@ export function cursorPosForDigitIndex(formatted: string, digitIndex: number) {
 }
 
 export function maskDate(raw: string) {
+  if (!raw) return "";
   const d = raw.replace(/\D/g, "").slice(0, 8);
   const dd = d.slice(0, 2);
   const mm = d.slice(2, 4);
@@ -49,6 +50,7 @@ export function maskDate(raw: string) {
 }
 
 export function maskPhone(raw: string) {
+  if (!raw) return "";
   const d = raw.replace(/\D/g, "").slice(0, 11);
   const a = d.slice(0, 2);
   const b = d.slice(2, 3);
@@ -62,6 +64,7 @@ export function maskPhone(raw: string) {
 }
 
 export function maskCPF(raw: string) {
+  if (!raw) return "";
   const d = raw.replace(/\D/g, "").slice(0, 11);
   const a = d.slice(0, 3);
   const b = d.slice(3, 6);
@@ -101,7 +104,7 @@ export const getTodayStr = hojeBR;
  */
 export const brToIso = (brDate: string): string => {
   if (!brDate || brDate.length < 10) return '';
-  const parts = brDate.split('-');
+  const parts = brDate.includes('-') ? brDate.split('-') : brDate.split('/');
   if (parts.length !== 3) return '';
   const [d, m, y] = parts;
   return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;

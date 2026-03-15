@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Loan, Client, Installment } from '../types';
 import { formatCurrency, parseBrazilianNumber, formatToInputMask, hojeBR, maskDate, countDigitsBeforeCursor, cursorPosForDigitIndex } from '../utils';
 
@@ -8,14 +8,30 @@ interface InstallmentPaymentModalProps {
   installment: Installment;
   onConfirm: (capital: number, interest: number, date: string) => Promise<void>;
   onPayInterestOnly: (interest: number, date: string) => Promise<void>;
+  onLiquidateEarly: (totalCapital: number, currentInterest: number, date: string) => Promise<void>;
   onCancel: () => void;
 }
 
-const InstallmentPaymentModal: React.FC<InstallmentPaymentModalProps> = ({ loan, client, installment, onConfirm, onPayInterestOnly, onCancel }) => {
+const InstallmentPaymentModal: React.FC<InstallmentPaymentModalProps> = ({ loan, client, installment, onConfirm, onPayInterestOnly, onLiquidateEarly, onCancel }) => {
   const [capitalStr, setCapitalStr] = useState(formatToInputMask(installment.capitalValue));
   const [interestStr, setInterestStr] = useState(formatToInputMask(installment.interestValue));
   const [paymentDate, setPaymentDate] = useState(hojeBR());
   const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Calcular valor de quitação antecipada
+  const pendingInstallments = loan.installments?.filter(i => i.status === 'pendente') || [];
+  const totalPendingCapital = pendingInstallments.reduce((acc, i) => acc + i.capitalValue, 0);
+  const currentInterestValue = installment.interestValue;
+  const liquidationValue = totalPendingCapital + currentInterestValue;
+
+  useEffect(() => {
+    if (errorMessage) {
+      const timer = setTimeout(() => setErrorMessage(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMessage]);
+
   const dateRef = useRef<HTMLInputElement>(null);
 
   const currentCapital = parseBrazilianNumber(capitalStr);
@@ -38,20 +54,59 @@ const InstallmentPaymentModal: React.FC<InstallmentPaymentModalProps> = ({ loan,
   };
 
   const handleConfirmRecebimento = async () => {
-    if (totalReceberValue <= 0) return alert("Informe um valor válido.");
+    if (totalReceberValue <= 0) {
+      setErrorMessage("Informe um valor válido.");
+      return;
+    }
     
     setIsSaving(true);
+    setErrorMessage(null);
     try {
       await onConfirm(currentCapital, currentInterest, paymentDate);
       // O App.tsx cuidará de resetar os IDs de seleção e fechar o modal
     } catch (err: any) {
-      alert(err.message || "Erro ao salvar recebimento.");
+      setErrorMessage(err.message || "Erro ao salvar recebimento.");
+      setIsSaving(false);
+    }
+  };
+
+  const handlePayInterestOnly = async () => {
+    if (currentInterest <= 0) {
+      setErrorMessage("Informe o valor dos juros.");
+      return;
+    }
+    
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      await onPayInterestOnly(currentInterest, paymentDate);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Erro ao salvar juros.");
+      setIsSaving(false);
+    }
+  };
+
+  const handleLiquidateEarly = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      await onLiquidateEarly(totalPendingCapital, currentInterestValue, paymentDate);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Erro ao quitar contrato.");
       setIsSaving(false);
     }
   };
 
   return (
     <div className="fixed inset-0 z-[150] flex items-end md:items-center justify-center bg-[#0a1629]/95 backdrop-blur-2xl p-0 md:p-4 animate-in fade-in duration-300">
+      {errorMessage && (
+        <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[200] animate-bounce w-full px-4">
+          <div className="bg-red-600 text-white px-6 py-3 rounded-2xl shadow-[0_0_20px_rgba(220,38,38,0.5)] flex items-center gap-3 border-2 border-white/20 mx-auto max-w-xs">
+            <span className="text-lg shrink-0">❌</span>
+            <span className="font-black uppercase tracking-widest text-[9px] italic leading-tight">{errorMessage}</span>
+          </div>
+        </div>
+      )}
       <div className="w-full max-w-lg bg-[#0b1b35] border border-emerald-500/20 rounded-t-[40px] md:rounded-[40px] shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden animate-in slide-in-from-bottom-10 text-white">
         
         <div className="p-8 border-b border-white/5 flex justify-between items-start">
@@ -98,12 +153,23 @@ const InstallmentPaymentModal: React.FC<InstallmentPaymentModalProps> = ({ loan,
             />
           </div>
 
-          <div className="bg-gradient-to-br from-emerald-600/20 to-emerald-600/10 p-8 rounded-[40px] border border-emerald-500/10 text-center shadow-2xl relative overflow-hidden group">
-             <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-2xl rounded-full"></div>
-             <span className="text-[10px] font-black text-emerald-400/50 uppercase italic tracking-[0.4em] mb-3 block">TOTAL A RECEBER</span>
-             <div className="text-5xl font-black text-white tracking-tighter drop-shadow-md">
-               {formatCurrency(totalReceberValue)}
-             </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-black/40 p-6 rounded-3xl border border-white/5 text-center">
+              <span className="text-[8px] font-black text-white/20 uppercase italic tracking-[0.3em] mb-2 block">VALOR PARCELA</span>
+              <div className="text-2xl font-black text-white tracking-tighter">
+                {formatCurrency(totalReceberValue)}
+              </div>
+            </div>
+            <button 
+              type="button"
+              onClick={handleLiquidateEarly}
+              className="bg-emerald-600/10 hover:bg-emerald-600/20 p-6 rounded-3xl border border-emerald-500/20 text-center transition-all group"
+            >
+              <span className="text-[8px] font-black text-emerald-400 uppercase italic tracking-[0.3em] mb-2 block group-hover:scale-110 transition-transform">QUITAR CONTRATO</span>
+              <div className="text-2xl font-black text-emerald-400 tracking-tighter">
+                {formatCurrency(liquidationValue)}
+              </div>
+            </button>
           </div>
         </div>
 
@@ -113,16 +179,7 @@ const InstallmentPaymentModal: React.FC<InstallmentPaymentModalProps> = ({ loan,
           <button 
             type="button"
             disabled={isSaving}
-            onClick={async () => {
-              if (currentInterest <= 0) return alert("Informe o valor dos juros.");
-              setIsSaving(true);
-              try {
-                await onPayInterestOnly(currentInterest, paymentDate);
-              } catch (err: any) {
-                alert(err.message || "Erro ao salvar.");
-                setIsSaving(false);
-              }
-            }}
+            onClick={handlePayInterestOnly}
             className="flex-1 py-5 bg-white/5 hover:bg-white/10 text-emerald-400 border border-emerald-500/20 rounded-[30px] font-black uppercase text-[12px] tracking-[0.3em] italic transition-all disabled:opacity-50"
           >
             {isSaving ? '...' : 'PAGAR SÓ JUROS'}

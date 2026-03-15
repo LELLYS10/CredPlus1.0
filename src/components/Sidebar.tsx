@@ -69,15 +69,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, profileImage, o
         </div>
       </aside>
 
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0b1b35] border-t border-white/5 flex justify-around items-center z-50 px-2 overflow-x-auto no-scrollbar">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-14 bg-[#0b1b35]/95 backdrop-blur-xl border-t border-white/5 flex justify-around items-center z-50 px-2 overflow-x-auto no-scrollbar">
         {menuItems.map((item) => (
-          <button key={item.id} onClick={() => handleNav(item.id)} className={`flex flex-col items-center min-w-[60px] ${currentView === item.id ? 'opacity-100' : 'opacity-30'}`}>
-            <span className="text-xl">{item.icon}</span>
-            <span className="text-[8px] font-bold uppercase">{item.label}</span>
+          <button key={item.id} onClick={() => handleNav(item.id)} className={`flex flex-col items-center min-w-[50px] transition-all ${currentView === item.id ? 'opacity-100 scale-110 text-emerald-400' : 'opacity-30'}`}>
+            <span className="text-lg">{item.icon}</span>
+            <span className="text-[7px] font-black uppercase tracking-tighter">{item.label}</span>
           </button>
         ))}
-        <button onClick={() => onClearData?.()} className="opacity-30 text-xl min-w-[40px]">🗑️</button>
-        <button onClick={onLogout} className="opacity-30 text-xl min-w-[40px]">🚪</button>
+        <button onClick={() => onClearData?.()} className="opacity-30 text-lg min-w-[35px]">🗑️</button>
+        <button onClick={onLogout} className="opacity-30 text-lg min-w-[35px]">🚪</button>
       </nav>
     </>
   );

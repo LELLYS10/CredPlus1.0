@@ -1,5 +1,5 @@
 {
   "name": "CREDPLUS",
   "description": "Sistema completo para gestão de empréstimos, clientes e cobranças.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["microphone"]
 }

@@ -99,9 +99,9 @@ const ClientList: React.FC<ClientListProps> = ({
           <span className="absolute left-6 top-1/2 -translate-y-1/2 text-white/20 text-xl">🔍</span>
         </div>
         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-          {['all', 'active', 'overdue', 'inactive', 'today', 'tomorrow'].map(f => (
+          {['all', 'overdue', 'today', 'tomorrow', 'active', 'inactive'].map(f => (
             <button key={f} onClick={() => setActiveFilter(f)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase italic tracking-widest transition-all whitespace-nowrap ${getFilterColor(f)}`}>
-              {f === 'all' ? 'Todos' : f === 'active' ? 'Ativos' : f === 'overdue' ? 'Vencidos' : f === 'inactive' ? 'Inativos' : f === 'today' ? 'Hoje' : 'Amanhã'}
+              {f === 'all' ? 'Todos' : f === 'overdue' ? 'Vencidos' : f === 'today' ? 'Hoje' : f === 'tomorrow' ? 'Amanhã' : f === 'active' ? 'Ativos' : 'Inativos'}
             </button>
           ))}
         </div>
@@ -129,12 +129,12 @@ const ClientList: React.FC<ClientListProps> = ({
 
           const openWhatsApp = (e: React.MouseEvent) => {
             e.stopPropagation();
-            const cleanPhone = client.phone.replace(/\D/g, '');
+            const cleanPhone = (client.phone || '').replace(/\D/g, '');
             window.open(`https://wa.me/55${cleanPhone}`, '_blank');
           };
 
           return (
-            <div key={client.id} className={`bg-white/5 border rounded-[24px] overflow-hidden transition-all ${isInactive ? 'grayscale opacity-40' : ''} ${isExpanded ? 'border-emerald-500/30 bg-white/10' : 'border-white/5 hover:bg-white/[0.07]'}`}>
+            <div key={client.id} className={`bg-white/5 border rounded-[24px] overflow-hidden transition-all ${isExpanded ? 'border-emerald-500/30 bg-white/10' : 'border-white/5 hover:bg-white/[0.07]'}`}>
               <div className="p-4 md:p-5 flex flex-col md:grid md:grid-cols-[1.5fr,1fr,1fr,100px] items-center gap-4 cursor-pointer" onClick={() => setExpandedClientId(isExpanded ? null : client.id)}>
                 
                 {/* Cliente / Contato */}
@@ -183,31 +183,33 @@ const ClientList: React.FC<ClientListProps> = ({
 
               {isExpanded && (
                 <div className="px-6 md:px-8 pb-8 space-y-4">
-                  <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-4">
-                    <div className="flex items-center gap-4">
-                      <span className="text-[10px] font-black text-white/20 uppercase italic">CONTRATOS ATIVOS</span>
-                      <button onClick={(e) => { e.stopPropagation(); setHistoryClientId(client.id); }} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg text-[9px] font-black uppercase italic border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all">Ver Extrato</button>
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-center border-b border-white/5 pb-4 mb-4 gap-4">
+                    <div className="flex items-center gap-3 md:gap-4">
+                      <span className="text-[10px] font-black text-white/20 uppercase italic whitespace-nowrap">CONTRATOS ATIVOS</span>
+                      <button onClick={(e) => { e.stopPropagation(); setHistoryClientId(client.id); }} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg text-[9px] font-black uppercase italic border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all whitespace-nowrap">Ver Extrato</button>
                     </div>
-                    <button onClick={(e) => { e.stopPropagation(); onDeleteClient(client.id); }} className="p-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all">✕</button>
+                    <div className="flex justify-end">
+                      <button onClick={(e) => { e.stopPropagation(); onDeleteClient(client.id); }} className="p-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all" title="Excluir Cliente">✕</button>
+                    </div>
                   </div>
                   {cLoans.map(loan => (
                     <div key={loan.id} className="p-5 bg-black/40 rounded-[24px] border border-white/5 space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div>
+                      <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+                        <div className="space-y-1">
                           <p className="text-[8px] font-black text-emerald-400 uppercase italic">TIPO: {loan.loanType === 'recurrent' ? 'RECORRENTE' : 'PARCELADO'}</p>
-                          <p className="text-2xl font-black text-white">{formatCurrency(loan.amount)}</p>
+                          <p className="text-2xl font-black text-white tracking-tighter">{formatCurrency(loan.amount)}</p>
                           <p className="text-[8px] text-white/30 italic">JUROS FIXO: {formatCurrency(loan.interestFixedAmount)}</p>
                         </div>
                         {loan.loanType === 'recurrent' && (
-                          <div className="flex gap-2">
-                            <button onClick={() => onEditLoan(loan.id)} className="px-4 py-3 bg-white/5 hover:bg-white/10 text-white/40 rounded-xl text-[10px] font-black uppercase italic transition-all border border-white/5">EDITAR</button>
-                            <button onClick={() => onPayInterest(loan.id)} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-[10px] font-black uppercase italic transition-all shadow-lg text-white">DAR BAIXA</button>
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={() => onEditLoan(loan.id)} className="flex-1 md:flex-none px-4 py-3 bg-white/5 hover:bg-white/10 text-white/40 rounded-xl text-[10px] font-black uppercase italic transition-all border border-white/5">EDITAR</button>
+                            <button onClick={() => onPayInterest(loan.id)} className="flex-1 md:flex-none px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-[10px] font-black uppercase italic transition-all shadow-lg text-white">DAR BAIXA</button>
                           </div>
                         )}
                         {loan.loanType === 'installments' && (
-                          <div className="flex gap-2">
-                            <button onClick={() => onEditLoan(loan.id)} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/40 border border-white/5 rounded-xl text-[9px] font-black uppercase italic transition-all">EDITAR</button>
-                            <button onClick={() => onAmortize(loan.id)} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-[9px] font-black uppercase italic transition-all">AMORTIZAR</button>
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={() => onEditLoan(loan.id)} className="flex-1 md:flex-none px-4 py-2 bg-white/5 hover:bg-white/10 text-white/40 border border-white/5 rounded-xl text-[9px] font-black uppercase italic transition-all">EDITAR</button>
+                            <button onClick={() => onAmortize(loan.id)} className="flex-1 md:flex-none px-4 py-2 bg-white/5 hover:bg-white/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-[9px] font-black uppercase italic transition-all">AMORTIZAR</button>
                           </div>
                         )}
                       </div>
@@ -215,17 +217,19 @@ const ClientList: React.FC<ClientListProps> = ({
                       {loan.loanType === 'installments' && loan.installments && (
                         <div className="grid grid-cols-1 gap-2 mt-4 pt-4 border-t border-white/5">
                           {loan.installments.map(inst => (
-                            <div key={inst.id} className={`flex justify-between items-center p-3 rounded-xl border ${inst.status === 'pago' ? 'bg-emerald-500/5 border-emerald-500/10 opacity-60' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}>
-                              <div className="flex flex-col">
-                                <span className="text-[8px] font-black text-white/30 uppercase">{inst.number}ª PARCELA</span>
-                                <span className="text-[11px] font-black text-white">{formatCurrency(inst.capitalValue + inst.interestValue)}</span>
+                            <div key={inst.id} className={`flex justify-between items-center p-4 rounded-[20px] border ${inst.status === 'pago' ? 'bg-emerald-500/5 border-emerald-500/10 opacity-60' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}>
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{inst.number}ª PARCELA</span>
+                                  <span className={`text-[9px] font-black italic ${isOverdueLegacy(inst.dueDate) && inst.status !== 'pago' ? 'text-red-500' : 'text-white/40'}`}>{inst.dueDate}</span>
+                                </div>
+                                <span className="text-base font-black text-white tracking-tighter">{formatCurrency(inst.capitalValue + inst.interestValue)}</span>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <span className={`text-[9px] font-black italic ${isOverdueLegacy(inst.dueDate) && inst.status !== 'pago' ? 'text-red-500' : 'text-white/40'}`}>{inst.dueDate}</span>
+                              <div className="flex items-center">
                                 {inst.status === 'pendente' ? (
-                                  <button onClick={() => onPayInstallment(loan.id, inst.id)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-lg active:scale-95">DAR BAIXA</button>
+                                  <button onClick={() => onPayInstallment(loan.id, inst.id)} className="px-5 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">DAR BAIXA</button>
                                 ) : (
-                                  <span className="px-4 py-2 bg-emerald-500/10 text-emerald-400 rounded-lg text-[9px] font-black uppercase italic">PAGO</span>
+                                  <span className="px-5 py-3.5 bg-emerald-500/10 text-emerald-400 rounded-xl text-[10px] font-black uppercase italic border border-emerald-500/20">PAGO</span>
                                 )}
                               </div>
                             </div>

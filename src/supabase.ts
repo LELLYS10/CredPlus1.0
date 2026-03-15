@@ -15,8 +15,14 @@ export const supabase = new Proxy({} as SupabaseClient, {
       if (!client) {
         const { url, key } = getSupabaseConfig();
         if (!url || !key || !url.startsWith('http')) {
-          console.warn('Supabase configuration missing or invalid.');
-          return null;
+          const msg = 'Supabase configuration missing or invalid. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
+          console.error(msg);
+          // Return a dummy object that throws on any property access to provide better error messages
+          return new Proxy({}, {
+            get() {
+              throw new Error(msg);
+            }
+          });
         }
         client = createClient(url, key);
       }

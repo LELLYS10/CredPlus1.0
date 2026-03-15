@@ -32,11 +32,11 @@ export const localDb = {
   },
   deleteClient: (id: string) => {
     const clients = localDb.getClients();
-    set(STORAGE_KEYS.CLIENTS, clients.map(c => c.id === id ? { ...c, deleted_at: new Date().toISOString() } : c));
+    set(STORAGE_KEYS.CLIENTS, clients.map(c => c.id === id ? { ...c, deletedAt: new Date().toISOString() } : c));
   },
 
   getLoans: () => get<Loan[]>(STORAGE_KEYS.LOANS, []),
-  saveLoan: (loan: Omit<Loan, 'id'> & { installments?: Omit<Installment, 'id' | 'loan_id' | 'user_id'>[] }) => {
+  saveLoan: (loan: Omit<Loan, 'id'> & { installments?: Omit<Installment, 'id' | 'loanId' | 'userId'>[] }) => {
     const loans = localDb.getLoans();
     const newLoan: Loan = {
       ...loan,
@@ -49,8 +49,8 @@ export const localDb = {
       const newInstallments = loan.installments.map(inst => ({
         ...inst,
         id: crypto.randomUUID(),
-        loan_id: newLoan.id,
-        user_id: newLoan.user_id
+        loanId: newLoan.id,
+        userId: newLoan.userId
       }));
       set(STORAGE_KEYS.INSTALLMENTS, [...installments, ...newInstallments]);
     }
@@ -82,11 +82,11 @@ export const localDb = {
   getUsers: () => get<AppUser[]>(STORAGE_KEYS.USERS, []),
   saveUser: (user: AppUser) => {
     const users = localDb.getUsers();
-    set(STORAGE_KEYS.USERS, [...users.filter(u => u.user_id !== user.user_id), user]);
+    set(STORAGE_KEYS.USERS, [...users.filter(u => u.userId !== user.userId), user]);
   },
   updateUser: (userId: string, updates: Partial<AppUser>) => {
     const users = localDb.getUsers();
-    set(STORAGE_KEYS.USERS, users.map(u => u.user_id === userId ? { ...u, ...updates } : u));
+    set(STORAGE_KEYS.USERS, users.map(u => u.userId === userId ? { ...u, ...updates } : u));
   },
 
   getSession: () => get<any>(STORAGE_KEYS.SESSION, null),

@@ -37,6 +37,7 @@ const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadTimeout, setLoadTimeout] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const [view, setView] = useState<'dashboard' | 'clients' | 'add-client' | 'add-loan' | 'admin' | 'reports' | 'settings'>('dashboard');
@@ -52,6 +53,7 @@ const App: React.FC = () => {
   
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<string | null>(null);
+  const [globalErrorMessage, setGlobalErrorMessage] = useState<string | null>(null);
   
   const [data, setData] = useState<AppData>({
     clients: [],
@@ -59,6 +61,17 @@ const App: React.FC = () => {
     payments: [],
     profileImage: undefined,
   });
+
+  useEffect(() => {
+    console.log("App: View changed to:", view);
+  }, [view]);
+
+  useEffect(() => {
+    if (globalErrorMessage) {
+      const timer = setTimeout(() => setGlobalErrorMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [globalErrorMessage]);
 
   const isMaster = useCallback(() => {
     if (!session) return false;
@@ -92,14 +105,14 @@ const App: React.FC = () => {
       if (!profile && userEmail === ADMIN_EMAIL) {
         profile = {
           id: crypto.randomUUID(),
-          user_id: uid,
+          userId: uid,
           email: userEmail,
           role: 'master',
           status: 'ativo',
           plan: 'mensal',
-          billing_status: 'ok',
-          expires_at: null,
-          created_at: new Date().toISOString()
+          billingStatus: 'ok',
+          expiresAt: null,
+          createdAt: new Date().toISOString()
         };
         await supabaseService.saveProfile(profile);
       }
@@ -118,8 +131,8 @@ const App: React.FC = () => {
 
         const installmentsMap: Record<string, Installment[]> = {};
         installments.forEach(inst => {
-          if (!installmentsMap[inst.loan_id]) installmentsMap[inst.loan_id] = [];
-          installmentsMap[inst.loan_id].push(inst);
+          if (!installmentsMap[inst.loanId]) installmentsMap[inst.loanId] = [];
+          installmentsMap[inst.loanId].push(inst);
         });
 
         const mappedLoans = loans.map(l => {
@@ -169,7 +182,7 @@ const App: React.FC = () => {
           clients,
           loans: mappedLoans,
           payments,
-          profileImage: profile?.profile_image,
+          profileImage: profile?.profileImage,
           stats: mappedStats
         });
       }
@@ -185,10 +198,10 @@ const App: React.FC = () => {
     if (!loan) return;
     try {
       if (pData.interestValue > 0) {
-        await supabaseService.savePayment({ user_id: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: pData.interestValue, date: pData.date, type: 'interest' });
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: pData.interestValue, date: pData.date, type: 'interest' });
       }
       if (pData.capitalValue > 0) {
-        await supabaseService.savePayment({ user_id: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: pData.capitalValue, date: pData.date, type: 'capital' });
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: pData.capitalValue, date: pData.date, type: 'capital' });
       }
       const novoCapital = loan.amount - pData.capitalValue;
       const updates: any = { jurosPagoNoCiclo: pData.nextDueDate ? 0 : (loan.jurosPagoNoCiclo || 0) + pData.interestValue, amount: novoCapital, status: novoCapital <= 0 ? 'paid' : 'active' };
@@ -198,7 +211,10 @@ const App: React.FC = () => {
       await supabaseService.updateLoan(loan.id, updates);
       setSelectedLoanId(null);
       await refreshAppData();
-    } catch (err) { alert("Erro ao salvar: " + (err as any).message); }
+    } catch (err) {
+      console.error('App.tsx: Error in handleConfirmPayment:', err);
+      throw err;
+    }
   };
 
   const handleConfirmInstallment = async (capital: number, interest: number, date: string) => {
@@ -206,15 +222,15 @@ const App: React.FC = () => {
     if (!loan || !selectedInstallmentId) return;
     try {
       if (interest > 0) {
-        await supabaseService.savePayment({ user_id: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: interest, date: date, type: 'interest' });
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: interest, date: date, type: 'interest' });
       }
       if (capital > 0) {
-        await supabaseService.savePayment({ user_id: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: capital, date: date, type: 'capital' });
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: capital, date: date, type: 'capital' });
       }
-      await supabaseService.updateInstallment(selectedInstallmentId, { status: 'pago', paid_at: brToIso(date) });
+      await supabaseService.updateInstallment(selectedInstallmentId, { status: 'pago', paidAt: date });
       
       const updatedInstallments = await supabaseService.getInstallments(session.user.id);
-      const loanInsts = updatedInstallments.filter(i => i.loan_id === loan.id);
+      const loanInsts = updatedInstallments.filter(i => i.loanId === loan.id);
       const pendentes = loanInsts.filter(i => i.status === 'pendente');
       
       if (pendentes.length === 0) await supabaseService.updateLoan(loan.id, { status: 'paid' });
@@ -223,17 +239,64 @@ const App: React.FC = () => {
         if (nextInst) await supabaseService.updateLoan(loan.id, { dueDate: nextInst.dueDate });
       }
       setSelectedInstallmentId(null); setSelectedLoanId(null); await refreshAppData();
-    } catch (err) { alert("Erro: " + (err as any).message); }
+    } catch (err) {
+      console.error('App.tsx: Error in handleConfirmInstallment:', err);
+      throw err;
+    }
+  };
+
+  const handleLiquidateEarly = async (totalCapital: number, currentInterest: number, date: string) => {
+    const loan = data.loans.find(l => l.id === selectedLoanId);
+    if (!loan) return;
+    try {
+      // Registrar pagamento do capital total restante
+      await supabaseService.savePayment({ 
+        userId: session.user.id, 
+        loanId: loan.id, 
+        clientId: loan.clientId, 
+        amount: totalCapital, 
+        date: date, 
+        type: 'capital' 
+      });
+      
+      // Registrar pagamento do juro do mês atual
+      if (currentInterest > 0) {
+        await supabaseService.savePayment({ 
+          userId: session.user.id, 
+          loanId: loan.id, 
+          clientId: loan.clientId, 
+          amount: currentInterest, 
+          date: date, 
+          type: 'interest' 
+        });
+      }
+      
+      // Marcar todas as parcelas pendentes como pagas
+      const pendingInsts = loan.installments?.filter(i => i.status === 'pendente') || [];
+      for (const inst of pendingInsts) {
+        await supabaseService.updateInstallment(inst.id, { status: 'pago', paidAt: date });
+      }
+      
+      // Marcar o empréstimo como pago
+      await supabaseService.updateLoan(loan.id, { status: 'paid' });
+      
+      setSelectedInstallmentId(null); 
+      setSelectedLoanId(null); 
+      await refreshAppData();
+    } catch (err) {
+      console.error('App.tsx: Error in handleLiquidateEarly:', err);
+      throw err;
+    }
   };
 
   const handlePayInterestOnly = async (interest: number, date: string) => {
     const loan = data.loans.find(l => l.id === selectedLoanId);
     if (!loan || !selectedInstallmentId) return;
     try {
-      await supabaseService.savePayment({ user_id: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: interest, date: date, type: 'interest' });
+      await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: interest, date: date, type: 'interest' });
       
       const installments = await supabaseService.getInstallments(session.user.id);
-      const loanInsts = installments.filter(i => i.loan_id === loan.id);
+      const loanInsts = installments.filter(i => i.loanId === loan.id);
       const currentInst = loanInsts.find(i => i.id === selectedInstallmentId)!;
       
       const toUpdate = loanInsts.filter(i => i.status === 'pendente' && brToIso(i.dueDate) >= brToIso(currentInst.dueDate));
@@ -246,27 +309,30 @@ const App: React.FC = () => {
       }
       
       setSelectedInstallmentId(null); setSelectedLoanId(null); await refreshAppData();
-    } catch (err) { alert("Erro: " + (err as any).message); }
+    } catch (err) {
+      console.error('App.tsx: Error in handlePayInterestOnly:', err);
+      throw err;
+    }
   };
 
   const handleConfirmAmortization = async (amount: number, date: string) => {
     const loan = data.loans.find(l => l.id === amortizeLoanId);
     if (!loan) return;
     try {
-      await supabaseService.savePayment({ user_id: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: amount, date: date, type: 'capital' });
+      await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: amount, date: date, type: 'capital' });
       
       const novoCapital = loan.amount - amount;
       
       if (novoCapital <= 0) {
         await supabaseService.updateLoan(loan.id, { amount: 0, status: 'paid' });
         const installments = await supabaseService.getInstallments(session.user.id);
-        const loanInsts = installments.filter(i => i.loan_id === loan.id);
+        const loanInsts = installments.filter(i => i.loanId === loan.id);
         for (const i of loanInsts) {
-          if (i.status === 'pendente') await supabaseService.updateInstallment(i.id, { status: 'pago', paid_at: brToIso(date) });
+          if (i.status === 'pendente') await supabaseService.updateInstallment(i.id, { status: 'pago', paidAt: date });
         }
       } else {
         const installments = await supabaseService.getInstallments(session.user.id);
-        const pendingInsts = installments.filter(i => i.loan_id === loan.id && i.status === 'pendente');
+        const pendingInsts = installments.filter(i => i.loanId === loan.id && i.status === 'pendente');
         const numRestantes = pendingInsts.length;
         
         if (numRestantes > 0) {
@@ -286,7 +352,10 @@ const App: React.FC = () => {
       }
       
       setAmortizeLoanId(null); await refreshAppData();
-    } catch (err) { alert("Erro: " + (err as any).message); }
+    } catch (err) {
+      console.error('App.tsx: Error in handleConfirmAmortization:', err);
+      throw err;
+    }
   };
   
   const handleSaveLoanEdit = async (fields: Partial<Loan>) => {
@@ -296,14 +365,25 @@ const App: React.FC = () => {
       setEditLoanId(null);
       await refreshAppData();
     } catch (err) {
-      alert("Erro ao atualizar contrato: " + (err as any).message);
+      console.error('App.tsx: Error in handleSaveLoanEdit:', err);
+      throw err;
     }
   };
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      if (loading) setLoadTimeout(true);
+    }, 15000); // 15 segundos de timeout
+    return () => clearTimeout(timer);
+  }, [loading]);
+
+  useEffect(() => {
     const init = async () => {
       try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        const { data: { session: initialSession }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) throw sessionError;
+
         setSession(initialSession);
         if (initialSession) {
           await refreshAppData();
@@ -332,8 +412,15 @@ const App: React.FC = () => {
         };
       } catch (err: any) {
         console.error('[INIT_ERROR]', err);
-        if (err.message.includes('Supabase configuration missing') || err.message.includes('Invalid supabaseUrl')) {
-          setConfigError(err.message);
+        const errorMsg = err.message || String(err);
+        if (errorMsg.includes('Supabase configuration missing') || 
+            errorMsg.includes('Invalid supabaseUrl') || 
+            errorMsg.includes('apiKey') ||
+            errorMsg.includes('null')) {
+          setConfigError('Configuração do Supabase ausente ou inválida. Verifique as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
+        } else {
+          // Se for outro erro, ainda tentamos parar o loading para mostrar algo
+          console.warn('Erro não crítico na inicialização:', errorMsg);
         }
         setLoading(false);
       }
@@ -344,8 +431,19 @@ const App: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a1629] flex items-center justify-center">
-        <div className="w-16 h-16 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-[#0a1629] flex flex-col items-center justify-center p-6">
+        <div className="w-16 h-16 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-8"></div>
+        {loadTimeout && (
+          <div className="text-center animate-in fade-in duration-500">
+            <p className="text-white/40 text-sm italic mb-4">A conexão está demorando mais que o esperado...</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black uppercase italic transition-all border border-white/5"
+            >
+              Tentar Novamente
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -421,7 +519,7 @@ const App: React.FC = () => {
         onUpdateProfileImage={async (base64) => { 
           const profile = await supabaseService.getProfile(session.user.id);
           if (profile) {
-            await supabaseService.saveProfile({ ...profile, profile_image: base64 });
+            await supabaseService.saveProfile({ ...profile, profileImage: base64 });
             refreshAppData();
           }
         }}
@@ -432,7 +530,7 @@ const App: React.FC = () => {
         onClearData={() => setDeleteConfirmOpen(true)}
         theme="emerald"
       />
-      <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6 max-w-7xl mx-auto w-full overflow-y-auto no-scrollbar">
+      <main className="flex-1 p-4 md:p-6 pb-28 md:pb-6 max-w-7xl mx-auto w-full overflow-y-auto no-scrollbar">
         {view === 'dashboard' && <Dashboard data={data} theme="emerald" onFilterChange={(f) => { setActiveFilter(f); setView('clients'); }} />}
         {view === 'clients' && (
           <ClientList 
@@ -451,10 +549,23 @@ const App: React.FC = () => {
           <ClientForm 
             theme="emerald" existingClients={data.clients}
             onSave={async (c) => { 
-              const newClient = await supabaseService.saveClient({ ...c, user_id: session.user.id }); 
-              setSelectedClientId(newClient.id);
-              setView('add-loan'); 
-              refreshAppData(); 
+              console.log("App: onSave triggered with clients count:", data.clients.length);
+              try {
+                console.log("App: Saving client...", c);
+                const newClient = await supabaseService.saveClient({ ...c, userId: session.user.id }); 
+                console.log("App: Client saved successfully:", newClient);
+                
+                if (!newClient || !newClient.id) {
+                  throw new Error("Erro ao obter ID do novo cliente.");
+                }
+                
+                setSelectedClientId(newClient.id);
+                setView('add-loan'); 
+                refreshAppData(); 
+              } catch (err: any) {
+                console.error("App: Error saving client:", err);
+                throw err; // Re-throw so ClientForm can handle isSubmitting
+              }
             }}
             onCancel={() => setView('clients')}
           />
@@ -464,10 +575,23 @@ const App: React.FC = () => {
             theme="emerald" clientId={selectedClientId} clientName={data.clients.find(c => c.id === selectedClientId)?.name || ''}
             onCancel={() => setView('clients')}
             onSave={async (loan) => {
-               const { installments, ...loanData } = loan;
-               const cleanInstallments = installments?.map(({ id, loan_id, user_id, ...rest }: any) => rest);
-               await supabaseService.saveLoan({ ...loanData, user_id: session.user.id, installments: cleanInstallments });
-               setView('clients'); refreshAppData();
+               console.log('App.tsx: onSave loan started', JSON.stringify(loan));
+               try {
+                 const { installments, ...loanData } = loan;
+                 const cleanInstallments = installments?.map(({ id, loanId, userId, ...rest }: any) => rest);
+                 
+                 console.log('App.tsx: Calling supabaseService.saveLoan with:', JSON.stringify({ ...loanData, userId: session.user.id }));
+                 await supabaseService.saveLoan({ ...loanData, userId: session.user.id, installments: cleanInstallments });
+                 
+                 console.log('App.tsx: Loan saved, updating view and refreshing data');
+                 setView('clients'); 
+                 await refreshAppData();
+                 console.log('App.tsx: Data refreshed');
+               } catch (err: any) {
+                 console.error('App.tsx: Error saving loan:', err);
+                 setGlobalErrorMessage("Erro ao salvar contrato: " + (err.message || String(err)));
+                 throw err;
+               }
             }}
           />
         )}
@@ -491,6 +615,7 @@ const App: React.FC = () => {
           onCancel={() => { setSelectedLoanId(null); setSelectedInstallmentId(null); }} 
           onConfirm={handleConfirmInstallment}
           onPayInterestOnly={handlePayInterestOnly}
+          onLiquidateEarly={handleLiquidateEarly}
         />
       )}
 
@@ -526,17 +651,109 @@ const App: React.FC = () => {
         isOpen={deleteConfirmOpen} title={clientToDelete ? "Excluir Cliente?" : "Limpar Dados?"} message={clientToDelete ? "Isso removerá permanentemente o cliente e todos os seus contratos." : "Esta ação é irreversível."} isDanger={true}
         onCancel={() => { setDeleteConfirmOpen(false); setClientToDelete(null); }}
         onConfirm={async () => {
-          if (clientToDelete) await supabaseService.deleteClient(clientToDelete);
-          else {
-            // No Supabase, "limpar tudo" é perigoso, mas se o usuário quiser:
-            // Idealmente deletaríamos apenas os dados do usuário logado.
-            alert("Ação de limpar tudo não implementada para Supabase por segurança.");
+          try {
+            if (clientToDelete) {
+              await supabaseService.deleteClient(clientToDelete);
+            } else {
+              if (session?.user?.id) {
+                await supabaseService.clearAllData(session.user.id);
+              } else {
+                setGlobalErrorMessage("Usuário não autenticado.");
+              }
+            }
+          } catch (err: any) {
+            console.error("App: Error in ConfirmModal confirm:", err);
+            setGlobalErrorMessage("Erro ao processar ação: " + (err.message || String(err)));
+          } finally {
+            setClientToDelete(null); 
+            setDeleteConfirmOpen(false); 
+            refreshAppData();
           }
-          setClientToDelete(null); setDeleteConfirmOpen(false); refreshAppData();
         }}
       />
 
-      <AIAssistant data={data} />
+      <AIAssistant 
+        data={data} 
+        onAddClient={async (clientData) => {
+          console.log('App.tsx: onAddClient called with:', clientData);
+          if (!session) {
+            console.error('App.tsx: No session found during AI registration');
+            return;
+          }
+          try {
+            const result = await supabaseService.saveClient({
+              name: clientData.name,
+              phone: clientData.phone || '',
+              cpf: clientData.cpf || '',
+              address: clientData.address || '',
+              referredBy: clientData.referredBy || '',
+              notes: clientData.notes || '',
+              userId: session.user.id
+            });
+            console.log('App.tsx: Client saved successfully:', result);
+            await refreshAppData();
+          } catch (err) {
+            console.error('App.tsx: Error saving client via AI:', err);
+            throw err;
+          }
+        }}
+        onAddLoan={async (loanData) => {
+          console.log('App.tsx: onAddLoan called with:', loanData);
+          if (!session) return;
+          
+          const { addMonthsPreservingDay } = await import('./utils');
+          
+          let interestRate = loanData.amount > 0 ? (loanData.interestFixedAmount / loanData.amount) * 100 : 0;
+          if (isNaN(interestRate) || !isFinite(interestRate)) {
+            interestRate = 0;
+          }
+          
+          const loan: any = {
+            clientId: loanData.clientId,
+            amount: loanData.amount,
+            originalAmount: loanData.amount,
+            interestFixedAmount: loanData.interestFixedAmount,
+            interestRate: interestRate,
+            jurosPagoNoCiclo: 0,
+            loanDate: loanData.loanDate,
+            dueDate: loanData.dueDate || addMonthsPreservingDay(loanData.loanDate, 1),
+            status: 'active',
+            loanType: loanData.loanType,
+            userId: session.user.id
+          };
+
+          if (loanData.loanType === 'installments') {
+            const n = loanData.installmentsCount || 1;
+            const capitalPerInst = loanData.amount / n;
+            const interestPerInst = loanData.interestFixedAmount; // In the form it was numericAmount * numericRate, which is interestFixedAmount
+            
+            const installments: any[] = [];
+            for (let i = 1; i <= n; i++) {
+              installments.push({
+                number: i,
+                capitalValue: capitalPerInst,
+                interestValue: interestPerInst,
+                dueDate: addMonthsPreservingDay(loanData.loanDate, i),
+                status: 'pendente',
+              });
+            }
+            loan.installments = installments;
+            loan.dueDate = installments[0].dueDate;
+          }
+
+          await supabaseService.saveLoan(loan);
+          await refreshAppData();
+        }}
+      />
+
+      {globalErrorMessage && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-10">
+          <div className="bg-red-600 text-white px-6 py-3 rounded-2xl shadow-2xl border border-white/20 flex items-center gap-3">
+            <div className="w-2 h-2 bg-white rounded-full animate-ping"></div>
+            <p className="text-[10px] font-black uppercase italic tracking-widest">{globalErrorMessage}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

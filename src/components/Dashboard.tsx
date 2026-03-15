@@ -75,7 +75,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange }) => {
       doc.text(`Capital Recuperado: ${formatCurrency(totalCapital)}`, 14, 59);
 
       const tableData = monthlyPayments.map(p => [
-        p.date.replace(/-/g, '/'),
+        (p.date || '').replace(/-/g, '/'),
         getClientName(p.clientId),
         p.type === 'interest' ? 'JUROS' : 'CAPITAL',
         formatCurrency(p.amount)
@@ -93,86 +93,88 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange }) => {
       doc.save(`Extrato_${monthName}_${year}.pdf`);
     } catch (err) {
       console.error('Erro ao gerar PDF:', err);
-      alert('Erro ao gerar PDF');
+      // Silently fail or log, but avoid alert
     } finally {
       setIsGeneratingPdf(false);
     }
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-black italic tracking-tighter uppercase leading-none text-white">CRED<span className="text-emerald-500">PLUS</span></h1>
-          <p className="text-[9px] font-black text-emerald-400 uppercase tracking-[0.4em] mt-1.5 italic">Gestão de Emprestimo</p>
+    <div className="space-y-4 md:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4">
+        <div className="px-1">
+          <h1 className="text-xl md:text-3xl font-black italic tracking-tighter uppercase leading-none text-white">CRED<span className="text-emerald-500">PLUS</span></h1>
+          <p className="text-[7px] md:text-[9px] font-black text-emerald-400 uppercase tracking-[0.4em] mt-1 md:mt-1.5 italic">Gestão de Emprestimo</p>
         </div>
         
-        <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/5 backdrop-blur-xl">
+        <div className="flex bg-black/40 p-1 rounded-xl md:rounded-2xl border border-white/5 backdrop-blur-xl w-full md:w-auto justify-between md:justify-start">
           <button 
             onClick={generateMonthlyPdf}
             disabled={isGeneratingPdf}
-            className="px-4 py-2 mr-2 rounded-xl text-[9px] font-black uppercase italic transition-all bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-600 hover:text-white disabled:opacity-50"
+            className="px-3 md:px-4 py-1.5 md:py-2 mr-1 md:mr-2 rounded-lg md:rounded-xl text-[8px] md:text-[9px] font-black uppercase italic transition-all bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-600 hover:text-white disabled:opacity-50"
           >
             {isGeneratingPdf ? '...' : 'PDF'}
           </button>
-          {(['daily', 'monthly', 'total'] as ReportPeriod[]).map((p) => (
-            <button 
-              key={p} 
-              onClick={() => setReportPeriod(p)} 
-              className={`px-5 py-2 rounded-xl text-[9px] font-black uppercase italic transition-all ${reportPeriod === p ? 'bg-emerald-600 text-white shadow-lg' : 'text-white/20 hover:text-white/40'}`}
-            >
-              {p === 'daily' ? 'Hoje' : p === 'monthly' ? 'Mês' : 'Geral'}
-            </button>
-          ))}
+          <div className="flex gap-1">
+            {(['daily', 'monthly', 'total'] as ReportPeriod[]).map((p) => (
+              <button 
+                key={p} 
+                onClick={() => setReportPeriod(p)} 
+                className={`px-3 md:px-5 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[8px] md:text-[9px] font-black uppercase italic transition-all ${reportPeriod === p ? 'bg-emerald-600 text-white shadow-lg' : 'text-white/20 hover:text-white/40'}`}
+              >
+                {p === 'daily' ? 'Hoje' : p === 'monthly' ? 'Mês' : 'Geral'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
         <div className="relative group">
-          <div className="absolute -inset-0.5 bg-emerald-500/30 rounded-[32px] blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
-          <div className="relative bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[32px] p-5 flex justify-between items-center overflow-hidden">
-            <div className="absolute right-0 top-0 w-32 h-32 bg-emerald-500/5 blur-3xl rounded-full"></div>
-            <div className="space-y-1">
-              <p className="text-[8px] font-black text-emerald-400/50 uppercase tracking-[0.3em] italic">CAPITAL EM TRÂNSITO</p>
-              <h2 className="text-3xl font-black tracking-tighter text-white drop-shadow-sm">{formatCurrency(stats.totalActiveCapital)}</h2>
+          <div className="absolute -inset-0.5 bg-emerald-500/30 rounded-[24px] md:rounded-[32px] blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
+          <div className="relative bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[24px] md:rounded-[32px] p-3.5 md:p-5 flex justify-between items-center overflow-hidden">
+            <div className="absolute right-0 top-0 w-24 h-24 bg-emerald-500/5 blur-3xl rounded-full"></div>
+            <div className="space-y-0.5 md:space-y-1">
+              <p className="text-[7px] md:text-[8px] font-black text-emerald-400/50 uppercase tracking-[0.3em] italic">CAPITAL EM TRÂNSITO</p>
+              <h2 className="text-xl md:text-3xl font-black tracking-tighter text-white drop-shadow-sm">{formatCurrency(stats.totalActiveCapital)}</h2>
             </div>
-            <div className="bg-emerald-500/10 p-3 rounded-2xl border border-emerald-500/20">
-               <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+            <div className="bg-emerald-500/10 p-2.5 md:p-3 rounded-xl md:rounded-2xl border border-emerald-500/20">
+               <svg className="w-5 h-5 md:w-6 md:h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
             </div>
           </div>
         </div>
 
         <div className="relative group">
-          <div className="absolute -inset-0.5 bg-emerald-500/30 rounded-[32px] blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
-          <div className="relative bg-white/5 backdrop-blur-2xl border border-emerald-500/10 rounded-[32px] p-5 flex justify-between items-center overflow-hidden">
-            <div className="absolute right-0 top-0 w-32 h-32 bg-emerald-500/5 blur-3xl rounded-full"></div>
-            <div className="space-y-1">
-              <p className="text-[8px] font-black text-emerald-400/50 uppercase tracking-[0.3em] italic">LUCRO TOTAL (JUROS)</p>
-              <h2 className="text-3xl font-black tracking-tighter text-emerald-400 drop-shadow-sm">{formatCurrency(stats.totalInterestAccumulated)}</h2>
+          <div className="absolute -inset-0.5 bg-emerald-500/30 rounded-[24px] md:rounded-[32px] blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
+          <div className="relative bg-white/5 backdrop-blur-2xl border border-white/5 rounded-[24px] md:rounded-[32px] p-3.5 md:p-5 flex justify-between items-center overflow-hidden">
+            <div className="absolute right-0 top-0 w-24 h-24 bg-emerald-500/5 blur-3xl rounded-full"></div>
+            <div className="space-y-0.5 md:space-y-1">
+              <p className="text-[7px] md:text-[8px] font-black text-emerald-400/50 uppercase tracking-[0.3em] italic">LUCRO TOTAL (JUROS)</p>
+              <h2 className="text-xl md:text-3xl font-black tracking-tighter text-emerald-400 drop-shadow-sm">{formatCurrency(stats.totalInterestAccumulated)}</h2>
             </div>
-            <div className="bg-emerald-500/10 p-3 rounded-2xl border border-emerald-500/20">
-               <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <div className="bg-emerald-500/10 p-2.5 md:p-3 rounded-xl md:rounded-2xl border border-emerald-500/20">
+               <svg className="w-5 h-5 md:w-6 md:h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <button onClick={() => onFilterChange('all')} className="bg-white/5 border border-white/5 hover:border-emerald-500/30 p-5 rounded-[28px] flex flex-col items-center gap-1.5 group transition-all">
-          <span className="text-2xl font-black text-emerald-400 group-hover:scale-110 transition-transform">{data.clients.length}</span>
-          <span className="text-[8px] font-black uppercase text-emerald-400/40 tracking-widest italic">CLIENTES</span>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <button onClick={() => onFilterChange('all')} className="bg-white/5 border border-white/5 hover:border-emerald-500/30 p-3.5 md:p-5 rounded-[20px] md:rounded-[28px] flex flex-col items-center gap-1 group transition-all">
+          <span className="text-xl md:text-2xl font-black text-emerald-400 group-hover:scale-110 transition-transform">{data.clients.length}</span>
+          <span className="text-[7px] md:text-[8px] font-black uppercase text-emerald-400/40 tracking-widest italic">CLIENTES</span>
         </button>
-        <button onClick={() => onFilterChange('active')} className="bg-white/5 border border-white/5 hover:border-emerald-500/30 p-5 rounded-[28px] flex flex-col items-center gap-1.5 group transition-all">
-          <span className={`text-2xl font-black transition-transform group-hover:scale-110 ${stats.activeClientsCount > 0 ? 'text-emerald-400 shadow-emerald-400/50' : 'text-white/10'}`}>{stats.activeClientsCount}</span>
-          <span className="text-[8px] font-black uppercase text-emerald-400/40 tracking-widest italic">ATIVOS</span>
+        <button onClick={() => onFilterChange('active')} className="bg-white/5 border border-white/5 hover:border-emerald-500/30 p-3.5 md:p-5 rounded-[20px] md:rounded-[28px] flex flex-col items-center gap-1 group transition-all">
+          <span className={`text-xl md:text-2xl font-black transition-transform group-hover:scale-110 ${stats.activeClientsCount > 0 ? 'text-emerald-400 shadow-emerald-400/50' : 'text-white/10'}`}>{stats.activeClientsCount}</span>
+          <span className="text-[7px] md:text-[8px] font-black uppercase text-emerald-400/40 tracking-widest italic">ATIVOS</span>
         </button>
-        <button onClick={() => onFilterChange('overdue')} className="bg-white/5 border border-white/5 hover:border-red-500/30 p-5 rounded-[28px] flex flex-col items-center gap-1.5 group transition-all">
-          <span className={`text-2xl font-black transition-transform group-hover:scale-110 ${stats.overdueCount > 0 ? 'text-red-500 shadow-red-500/50' : 'text-white/10'}`}>{stats.overdueCount}</span>
-          <span className="text-[8px] font-black uppercase text-red-500/40 tracking-widest italic">VENCIDOS</span>
+        <button onClick={() => onFilterChange('overdue')} className="bg-white/5 border border-white/5 hover:border-red-500/30 p-3.5 md:p-5 rounded-[20px] md:rounded-[28px] flex flex-col items-center gap-1 group transition-all">
+          <span className={`text-xl md:text-2xl font-black transition-transform group-hover:scale-110 ${stats.overdueCount > 0 ? 'text-red-500 shadow-red-500/50' : 'text-white/10'}`}>{stats.overdueCount}</span>
+          <span className="text-[7px] md:text-[8px] font-black uppercase text-red-500/40 tracking-widest italic">VENCIDOS</span>
         </button>
-        <button onClick={() => onFilterChange('inactive')} className="bg-white/5 border border-white/5 hover:border-white/20 p-5 rounded-[28px] flex flex-col items-center gap-1.5 group transition-all">
-          <span className={`text-2xl font-black transition-transform group-hover:scale-110 ${stats.inactiveClientsCount > 0 ? 'text-white/40' : 'text-white/10'}`}>{stats.inactiveClientsCount}</span>
-          <span className="text-[8px] font-black uppercase text-white/20 tracking-widest italic">INATIVOS</span>
+        <button onClick={() => onFilterChange('inactive')} className="bg-white/5 border border-white/5 hover:border-white/20 p-3.5 md:p-5 rounded-[20px] md:rounded-[28px] flex flex-col items-center gap-1 group transition-all">
+          <span className={`text-xl md:text-2xl font-black transition-transform group-hover:scale-110 ${stats.inactiveClientsCount > 0 ? 'text-white/40' : 'text-white/10'}`}>{stats.inactiveClientsCount}</span>
+          <span className="text-[7px] md:text-[8px] font-black uppercase text-white/20 tracking-widest italic">INATIVOS</span>
         </button>
       </div>
 
