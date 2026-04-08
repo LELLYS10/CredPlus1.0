@@ -162,19 +162,19 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange }) => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <button onClick={() => onFilterChange('all')} className="bg-white/5 border border-white/5 hover:border-emerald-500/30 p-3.5 md:p-5 rounded-[20px] md:rounded-[28px] flex flex-col items-center gap-1 group transition-all">
           <span className="text-xl md:text-2xl font-black text-emerald-400 group-hover:scale-110 transition-transform">{data.clients.length}</span>
-          <span className="text-[7px] md:text-[8px] font-black uppercase text-emerald-400/40 tracking-widest italic">CLIENTES</span>
+          <span className="text-[7px] md:text-[8px] font-black uppercase text-emerald-400/40 tracking-widest italic">🟢 TODOS</span>
         </button>
-        <button onClick={() => onFilterChange('active')} className="bg-white/5 border border-white/5 hover:border-emerald-500/30 p-3.5 md:p-5 rounded-[20px] md:rounded-[28px] flex flex-col items-center gap-1 group transition-all">
-          <span className={`text-xl md:text-2xl font-black transition-transform group-hover:scale-110 ${stats.activeClientsCount > 0 ? 'text-emerald-400 shadow-emerald-400/50' : 'text-white/10'}`}>{stats.activeClientsCount}</span>
-          <span className="text-[7px] md:text-[8px] font-black uppercase text-emerald-400/40 tracking-widest italic">ATIVOS</span>
+        <button onClick={() => onFilterChange('today')} className="bg-white/5 border border-white/5 hover:border-yellow-500/30 p-3.5 md:p-5 rounded-[20px] md:rounded-[28px] flex flex-col items-center gap-1 group transition-all">
+          <span className={`text-xl md:text-2xl font-black transition-transform group-hover:scale-110 ${stats.dueTodayCount > 0 ? 'text-yellow-400 shadow-yellow-400/50' : 'text-white/10'}`}>{stats.dueTodayCount}</span>
+          <span className="text-[7px] md:text-[8px] font-black uppercase text-yellow-400/40 tracking-widest italic">🟡 VENCE HOJE</span>
         </button>
         <button onClick={() => onFilterChange('overdue')} className="bg-white/5 border border-white/5 hover:border-red-500/30 p-3.5 md:p-5 rounded-[20px] md:rounded-[28px] flex flex-col items-center gap-1 group transition-all">
           <span className={`text-xl md:text-2xl font-black transition-transform group-hover:scale-110 ${stats.overdueCount > 0 ? 'text-red-500 shadow-red-500/50' : 'text-white/10'}`}>{stats.overdueCount}</span>
-          <span className="text-[7px] md:text-[8px] font-black uppercase text-red-500/40 tracking-widest italic">VENCIDOS</span>
+          <span className="text-[7px] md:text-[8px] font-black uppercase text-red-500/40 tracking-widest italic">🔴 VENCIDOS</span>
         </button>
-        <button onClick={() => onFilterChange('inactive')} className="bg-white/5 border border-white/5 hover:border-white/20 p-3.5 md:p-5 rounded-[20px] md:rounded-[28px] flex flex-col items-center gap-1 group transition-all">
-          <span className={`text-xl md:text-2xl font-black transition-transform group-hover:scale-110 ${stats.inactiveClientsCount > 0 ? 'text-white/40' : 'text-white/10'}`}>{stats.inactiveClientsCount}</span>
-          <span className="text-[7px] md:text-[8px] font-black uppercase text-white/20 tracking-widest italic">INATIVOS</span>
+        <button onClick={() => onFilterChange('tomorrow')} className="bg-white/5 border border-white/5 hover:border-purple-500/30 p-3.5 md:p-5 rounded-[20px] md:rounded-[28px] flex flex-col items-center gap-1 group transition-all">
+          <span className={`text-xl md:text-2xl font-black transition-transform group-hover:scale-110 ${stats.dueTomorrowCount > 0 ? 'text-purple-400 shadow-purple-400/50' : 'text-white/10'}`}>{stats.dueTomorrowCount}</span>
+          <span className="text-[7px] md:text-[8px] font-black uppercase text-purple-400/40 tracking-widest italic">🟣 VENCE AMANHÃ</span>
         </button>
       </div>
 

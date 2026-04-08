@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Client, Loan, Payment } from '../types';
-import { formatCurrency, brToIso } from '../utils';
+import { formatCurrency, brToIso, getBrTodayISO } from '../utils';
 import ClientHistoryModal from './ClientHistoryModal';
 
 interface ClientListProps {
@@ -146,7 +146,9 @@ const ClientList: React.FC<ClientListProps> = ({
                     {client.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="truncate min-w-0">
-                    <h3 className="font-bold text-sm text-white truncate">{client.name}</h3>
+                    <h3 className="font-bold text-sm text-white truncate">
+                      {cLoans.some(x => x.statusBucket==="overdue") ? "🔴 " : cLoans.some(x => x.statusBucket==="today") ? "🟡 " : cLoans.some(x => x.statusBucket==="tomorrow") ? "🟣 " : cLoans.length > 0 ? "🟢 " : ""}{client.name}
+                    </h3>
                     <p className="text-[9px] text-white/30">{client.phone}</p>
                   </div>
                 </div>
@@ -185,17 +187,56 @@ const ClientList: React.FC<ClientListProps> = ({
                           <span className="text-emerald-400 font-bold">{formatCurrency(info.capital)}</span>
                         </div>
                         
-                        {/* Linha 2: Valor | Pago | Restante */}
+                        {/* Linha 2: Valor | Ações */}
                         <div className="flex justify-between items-center">
                           <span className="text-white/40 text-xs font-bold">{formatCurrency(loan.amount)}</span>
                           <div className="flex gap-2 items-center">
                             {loan.loanType === 'recurrent' ? (
                               <button onClick={() => onPayInterest(loan.id)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-[8px] font-bold uppercase text-white">PAGAR</button>
                             ) : (
-                              <button onClick={() => onAmortize(loan.id)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-[8px] font-bold uppercase text-white">PARCELAS</button>
+                              <button onClick={() => onAmortize(loan.id)} className="px-2.5 py-1.5 bg-white/10 rounded-lg text-[8px] font-bold uppercase text-white/50">AMORTIZAR</button>
                             )}
                           </div>
                         </div>
+                        {loan.loanType === 'installments' && loan.installments && loan.installments.length > 0 && (
+                          <div className="mt-2 space-y-1.5">
+                            <p className="text-[8px] font-black text-white/30 uppercase tracking-wider mb-1">
+                              {loan.installments.filter(i => i.status === 'pago').length}/{loan.installments.length} PARCELAS PAGAS
+                            </p>
+                            {loan.installments.map(inst => {
+                              const todayISO = getBrTodayISO();
+                              const instDue = inst.dueDate ? inst.dueDate.split('T')[0] : '';
+                              const instDueISO = instDue ? brToIso(instDue) : '';
+                              const td = new Date(); td.setDate(td.getDate() + 1);
+                              const tomorrowISO = td.toISOString().split('T')[0];
+                              const isOv = inst.status === 'pendente' && instDueISO !== '' && instDueISO < todayISO;
+                              const isToday = inst.status === 'pendente' && instDueISO === todayISO;
+                              const isTomorrow = inst.status === 'pendente' && instDueISO === tomorrowISO;
+                              const dueFmt = instDue ? instDue.replace(/-/g, '/') : '-';
+                              return (
+                                <div key={inst.id} className={`flex items-center justify-between p-2 rounded-xl border ${inst.status === 'pago' ? 'bg-emerald-500/5 border-emerald-500/10 opacity-40' : isOv ? 'bg-red-500/10 border-red-500/30' : isToday ? 'bg-yellow-500/10 border-yellow-500/30' : isTomorrow ? 'bg-purple-500/10 border-purple-500/30' : 'bg-black/20 border-white/5'}`}>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[7px] font-black w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${inst.status === 'pago' ? 'bg-emerald-500 text-white' : isOv ? 'bg-red-500 text-white' : isToday ? 'bg-yellow-500 text-black' : isTomorrow ? 'bg-purple-500 text-white' : 'bg-white/10 text-white/40'}`}>{inst.number}</span>
+                                    <div>
+                                      <p className={`text-[8px] font-bold ${isOv ? 'text-red-400' : isToday ? 'text-yellow-400' : isTomorrow ? 'text-purple-400' : inst.status === 'pago' ? 'text-emerald-400' : 'text-white/50'}`}>
+                                        {dueFmt}{isOv ? ' ⚠️' : isToday ? ' 🔔' : isTomorrow ? ' ⏰' : ''}
+                                      </p>
+                                      <p className="text-[7px] text-white/30">C: {formatCurrency(inst.capitalValue)} · J: {formatCurrency(inst.interestValue)}</p>
+                                    </div>
+                                  </div>
+                                  {inst.status === 'pago' ? (
+                                    <span className="text-[7px] text-emerald-400 font-black">✓ PAGO</span>
+                                  ) : (
+                                    <button
+                                      onClick={() => onPayInstallment(loan.id, inst.id)}
+                                      className={`px-2.5 py-1.5 rounded-lg text-[7px] font-black uppercase ${isOv ? 'bg-red-600 hover:bg-red-500 text-white' : isToday ? 'bg-yellow-500 hover:bg-yellow-400 text-black' : isTomorrow ? 'bg-purple-600 hover:bg-purple-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+                                    >PAGAR</button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

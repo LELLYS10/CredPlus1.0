@@ -18,3 +18,26 @@
 body {
   @apply bg-[#0a1629] text-white antialiased;
 }
+
+/* ===== MOBILE FIXES ===== */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+button, a {
+  touch-action: manipulation;
+}
+input, select, textarea {
+  font-size: 16px !important;
+}
+body {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: none;
+}
+.main-content {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}
+@media (max-width: 768px) {
+  .space-y-4, .space-y-6 {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}

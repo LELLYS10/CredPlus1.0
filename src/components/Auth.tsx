@@ -170,7 +170,7 @@ const Auth: React.FC<AuthProps> = ({ onSession }) => {
               <div className="space-y-2">
                 <div className="flex justify-between items-center px-2">
                   <label className="block text-[9px] font-black text-white/30 uppercase tracking-[0.3em] italic">SENHA</label>
-                  <button type="button" onClick={() => setAuthMode('forgot-password')} className="text-[8px] font-black text-emerald-500/50 hover:text-emerald-500 uppercase italic transition-colors">Esqueceu a senha?</button>
+                  <button type="button" onClick={() => setAuthMode('forgot-password')} className="text-[10px] font-black text-emerald-400 hover:text-emerald-300 uppercase italic transition-colors">🔑 Esqueceu a senha?</button>
                 </div>
                 <input required type="password" className="w-full px-6 py-5 bg-black/40 border border-white/10 rounded-[24px] outline-none text-white focus:border-emerald-500 transition-all font-bold text-sm" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
               </div>

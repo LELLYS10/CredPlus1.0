@@ -380,6 +380,14 @@ const App: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       try {
+        // Verificar se é um link de recuperação de senha ANTES de qualquer coisa
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        if (hashParams.get('type') === 'recovery') {
+          setIsResettingPassword(true);
+          setLoading(false);
+          return;
+        }
+
         const { data: { session: initialSession }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) throw sessionError;

@@ -32,7 +32,7 @@ export default function PreRegistrationsList({ onSelect, onClose }: Props) {
     })();
   }, []);
 
-  const fmt = (d: string) => new Date(d).toLocaleDateString("pt-BR");
+  const fmt = (d: string) => { if (!d) return "-"; const p = d.split("T")[0].split("-"); return p[2]+"/"+p[1]+"/"+p[0]; };
 
   return (
     <div className="bg-[#0a1629] min-h-screen p-4">

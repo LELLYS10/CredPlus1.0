@@ -103,6 +103,13 @@ export const supabaseService = {
       .eq('user_id', userId);
     if (error) throw error;
   },
+  deleteProfile: async (userId: string) => {
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('user_id', userId);
+    if (error) throw error;
+  },
 
   // Clients
   getClients: async (userId: string) => {

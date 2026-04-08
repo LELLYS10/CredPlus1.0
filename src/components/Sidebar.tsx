@@ -69,15 +69,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, profileImage, o
         </div>
       </aside>
 
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-14 bg-[#0b1b35]/95 backdrop-blur-xl border-t border-white/5 flex justify-around items-center z-50 px-2 overflow-x-auto no-scrollbar">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0b1b35]/95 backdrop-blur-xl border-t border-white/5 flex justify-around items-center z-50 px-1" style={{paddingBottom: 'max(env(safe-area-inset-bottom), 8px)', paddingTop: '6px'}}>
         {menuItems.map((item) => (
-          <button key={item.id} onClick={() => handleNav(item.id)} className={`flex flex-col items-center min-w-[50px] transition-all ${currentView === item.id ? 'opacity-100 scale-110 text-emerald-400' : 'opacity-30'}`}>
-            <span className="text-lg">{item.icon}</span>
-            <span className="text-[7px] font-black uppercase tracking-tighter">{item.label}</span>
+          <button key={item.id} onClick={() => handleNav(item.id)} className={`flex flex-col items-center justify-center min-w-[52px] min-h-[44px] transition-all touch-manipulation ${currentView === item.id ? 'opacity-100 text-emerald-400' : 'opacity-30'}`}>
+            <span className="text-xl leading-none">{item.icon}</span>
+            <span className="text-[9px] font-black uppercase tracking-tighter mt-0.5 leading-none">{item.label}</span>
           </button>
         ))}
-        <button onClick={() => onClearData?.()} className="opacity-30 text-lg min-w-[35px]">🗑️</button>
-        <button onClick={onLogout} className="opacity-30 text-lg min-w-[35px]">🚪</button>
+        <button onClick={() => onClearData?.()} className="opacity-20 flex flex-col items-center justify-center min-w-[44px] min-h-[44px] touch-manipulation text-xl">🗑️</button>
+        <button onClick={onLogout} className="opacity-20 flex flex-col items-center justify-center min-w-[44px] min-h-[44px] touch-manipulation text-xl">🚪</button>
       </nav>
     </>
   );

@@ -31,6 +31,11 @@ const LoanForm: React.FC<LoanFormProps> = ({ clientId, clientName, onCancel, onS
     const now = new Date();
     return `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
   });
+  const [firstDueDate, setFirstDueDate] = useState(() => {
+    const now = new Date();
+    const d = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+    return addMonthsPreservingDay(d, 1);
+  });
 
   const handleAmountChange = (val: string) => {
     const numericAmount = parseBrazilianNumber(val);
@@ -92,7 +97,7 @@ const LoanForm: React.FC<LoanFormProps> = ({ clientId, clientName, onCancel, onS
       interestRate: numericRate,
       jurosPagoNoCiclo: 0,
       loanDate,
-      dueDate: addMonthsPreservingDay(loanDate, 1),
+      dueDate: firstDueDate,
       status: 'active',
       loanType,
       totalInstallments: loanType === 'installments' ? parseInt(numInstallments) || 1 : 1,
@@ -121,7 +126,7 @@ const LoanForm: React.FC<LoanFormProps> = ({ clientId, clientName, onCancel, onS
           number: i,
           capitalValue: finalCapital,
           interestValue: interestPerInst,
-          dueDate: addMonthsPreservingDay(loanDate, i),
+          dueDate: addMonthsPreservingDay(firstDueDate, i - 1),
           status: 'pendente',
         });
       }
@@ -211,7 +216,7 @@ const LoanForm: React.FC<LoanFormProps> = ({ clientId, clientName, onCancel, onS
                 type="text"
                 required
                 value={loanDate}
-                onChange={(e) => setLoanDate(maskDate(e.target.value))}
+                onChange={(e) => { const v = maskDate(e.target.value); setLoanDate(v); if(v.length===10) setFirstDueDate(addMonthsPreservingDay(v, 1)); }}
                 className="w-full bg-black/20 border border-white/5 rounded-lg py-2 md:py-2.5 pl-8 pr-3 text-xs font-bold text-white focus:border-emerald-500/50 outline-none transition-all"
                 placeholder="DD-MM-YYYY"
               />
@@ -243,6 +248,21 @@ const LoanForm: React.FC<LoanFormProps> = ({ clientId, clientName, onCancel, onS
           </div>
         </div>
 
+        <div className="space-y-1">
+          <label className="text-[7px] md:text-[8px] font-black text-emerald-400 uppercase tracking-widest ml-2">📅 Data 1º Vencimento</label>
+          <div className="relative">
+            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-400/60" size={12} />
+            <input
+              type="text"
+              required
+              value={firstDueDate}
+              onChange={(e) => setFirstDueDate(maskDate(e.target.value))}
+              className="w-full bg-black/20 border border-emerald-500/30 rounded-lg py-2 md:py-2.5 pl-8 pr-3 text-xs font-bold text-white focus:border-emerald-500/50 outline-none transition-all"
+              placeholder="DD-MM-YYYY"
+            />
+          </div>
+          <p className="text-[7px] text-white/20 ml-2 italic">Data da 1ª parcela ou vencimento dos juros</p>
+        </div>
         {loanType === 'installments' && (
           <div className="space-y-1">
             <label className="text-[7px] md:text-[8px] font-black text-emerald-400 uppercase tracking-widest ml-2">Nº de Parcelas</label>

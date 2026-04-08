@@ -107,7 +107,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ data, onAddClient, onAddLoan 
     setLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: (process.env as any).GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY });
       
       const systemInstruction = `
         Seu nome é Cred. Você é o assistente pessoal e parceiro de negócios do administrador no sistema CREDPLUS.
@@ -197,7 +197,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ data, onAddClient, onAddLoan 
       ];
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.5-flash",
         contents: [
           ...chatHistory,
           { role: 'user', parts: [{ text: userMessage }] }

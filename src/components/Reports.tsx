@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Client, Loan, Payment, AppData } from '../types';
 import { formatCurrency, isoToBr } from '../utils';
 import { jsPDF } from 'jspdf';
@@ -10,6 +10,8 @@ interface ReportsProps {
 
 const Reports: React.FC<ReportsProps> = ({ data }) => {
   const { clients, loans, payments } = data;
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   const generatePDF = (client: Client) => {
     const doc = new jsPDF();
@@ -125,72 +127,176 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
     doc.save(`Extrato_${(client.name || 'Cliente').replace(/\s+/g, '_')}.pdf`);
   };
 
+
+  const clientStats = useMemo(() =>
+    clients.map(client => {
+      const clientLoans = loans.filter(l => l.clientId === client.id);
+      const clientPayments = payments
+        .filter(p => p.clientId === client.id)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const totalLent = clientLoans.reduce((acc, l) => acc + (l.originalAmount || l.amount || 0), 0);
+      const totalInterestPaid = clientPayments.filter(p => p.type === 'interest').reduce((acc, p) => acc + p.amount, 0);
+      const activeBalance = clientLoans.filter(l => l.status !== 'paid').reduce((acc, l) => acc + l.amount, 0);
+      return { client, clientLoans, clientPayments, totalLent, totalInterestPaid, activeBalance };
+    }),
+  [clients, loans, payments]);
+
+  const filtered = useMemo(() =>
+    clientStats.filter(({ client }) =>
+      client.name.toLowerCase().includes(search.toLowerCase()) ||
+      (client.phone || '').includes(search)
+    ),
+  [clientStats, search]);
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <header className="flex justify-between items-center">
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-2">
         <div>
-          <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white leading-none">RELATÓRIOS E EXTRATOS</h2>
-          <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em] mt-2 italic">Visão Geral de Clientes</p>
+          <h2 className="text-xl font-black uppercase italic text-white">RELATRIOS E EXTRATOS</h2>
+          <p className="text-[10px] text-emerald-400/60 uppercase tracking-widest">VISO GERAL DE CLIENTES</p>
         </div>
-      </header>
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por nome ou telefone..."
+          className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none focus:border-emerald-500/50 w-full md:w-72"
+        />
+      </div>
 
-      <div className="grid gap-4">
-        <div className="hidden md:grid grid-cols-[2fr,1fr,1fr,1fr,120px] gap-4 px-8 text-[9px] font-black text-white/20 uppercase italic tracking-[0.2em]">
-          <div>Cliente</div>
-          <div className="text-right">Total Emprestado</div>
-          <div className="text-right">Juros Pagos</div>
-          <div className="text-right">Saldo Devedor</div>
-          <div className="text-center">Ações</div>
-        </div>
+      {/* Table header - desktop only */}
+      <div className="hidden md:grid gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-white/25 italic border-b border-white/5"
+           style={{gridTemplateColumns:'2fr 1fr 1fr 1fr 32px'}}>
+        <span>CLIENTE</span>
+        <span className="text-right">TOTAL EMPR.</span>
+        <span className="text-right">JUROS PAGOS</span>
+        <span className="text-right">SALDO DEV.</span>
+        <span></span>
+      </div>
 
-        {clients.map(client => {
-          const clientLoans = loans.filter(l => l.clientId === client.id);
-          const clientPayments = payments.filter(p => p.clientId === client.id);
-          
-          const totalLent = clientLoans.reduce((acc, l) => acc + l.originalAmount, 0);
-          const totalInterestPaid = clientPayments.filter(p => p.type === 'interest').reduce((acc, p) => acc + p.amount, 0);
-          const activeBalance = clientLoans.filter(l => l.status !== 'paid').reduce((acc, l) => acc + l.amount, 0);
-
+      {/* Client list */}
+      <div className="space-y-1">
+        {filtered.map(({ client, clientLoans, clientPayments, totalLent, totalInterestPaid, activeBalance }) => {
+          const isOpen = expandedId === client.id;
           return (
-            <div key={client.id} className="bg-white/5 border border-white/5 p-4 md:p-6 rounded-[32px] hover:bg-white/10 transition-all group">
-              <div className="flex flex-col md:grid md:grid-cols-[2fr,1fr,1fr,1fr,120px] items-center gap-4">
-                <div className="flex items-center gap-4 w-full">
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-black text-lg border border-emerald-500/20">
-                    {client.name.charAt(0).toUpperCase()}
+            <div key={client.id} className={`rounded-2xl overflow-hidden border transition-all duration-200 ${isOpen ? 'border-emerald-500/20 bg-emerald-950/20' : 'border-white/5 bg-white/2 hover:bg-white/4'}`}>
+
+              {/* Compact row - click to expand */}
+              <button
+                onClick={() => setExpandedId(isOpen ? null : client.id)}
+                className="w-full px-4 py-3 flex items-center gap-3 text-left"
+              >
+                {/* Avatar */}
+                <div className="shrink-0 w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center font-black text-sm">
+                  {client.name.charAt(0).toUpperCase()}
+                </div>
+
+                {/* Name + phone */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-black uppercase italic text-white text-sm truncate leading-tight">{client.name}</p>
+                  <p className="text-[10px] text-white/30 font-bold leading-tight">{client.phone}</p>
+                </div>
+
+                {/* Values desktop */}
+                <div className="hidden md:flex items-center gap-6 shrink-0">
+                  <div className="text-right w-24">
+                    <p className="text-xs font-black text-white">{formatCurrency(totalLent)}</p>
                   </div>
-                  <div>
-                    <h3 className="font-black uppercase italic text-white leading-none">{client.name}</h3>
-                    <p className="text-[10px] text-white/30 font-bold mt-1">{client.phone}</p>
+                  <div className="text-right w-24">
+                    <p className="text-xs font-black text-emerald-400">{formatCurrency(totalInterestPaid)}</p>
+                  </div>
+                  <div className="text-right w-24">
+                    <p className={`text-xs font-black ${activeBalance > 0 ? 'text-emerald-400' : 'text-white/20'}`}>{formatCurrency(activeBalance)}</p>
                   </div>
                 </div>
 
-                <div className="w-full md:text-right">
-                  <p className="md:hidden text-[8px] font-black text-white/20 uppercase italic mb-1">TOTAL EMPRESTADO</p>
-                  <p className="text-base font-black text-white tracking-tighter">{formatCurrency(totalLent)}</p>
+                {/* Saldo mobile only */}
+                <div className="md:hidden text-right shrink-0">
+                  <p className={`text-xs font-black ${activeBalance > 0 ? 'text-emerald-400' : 'text-white/20'}`}>{formatCurrency(activeBalance)}</p>
+                  <p className="text-[8px] text-white/25 uppercase">saldo</p>
                 </div>
 
-                <div className="w-full md:text-right">
-                  <p className="md:hidden text-[8px] font-black text-white/20 uppercase italic mb-1">JUROS PAGOS</p>
-                  <p className="text-base font-black text-emerald-400 tracking-tighter">{formatCurrency(totalInterestPaid)}</p>
-                </div>
+                {/* Chevron */}
+                <span className={`text-white/30 text-xs transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`}></span>
+              </button>
 
-                <div className="w-full md:text-right">
-                  <p className="md:hidden text-[8px] font-black text-white/20 uppercase italic mb-1">SALDO DEVEDOR</p>
-                  <p className="text-base font-black text-emerald-400 tracking-tighter">{formatCurrency(activeBalance)}</p>
-                </div>
+              {/* Accordion body */}
+              {isOpen && (
+                <div className="border-t border-white/5 px-4 pb-4 pt-3 space-y-4">
 
-                <div className="w-full flex justify-center md:justify-end">
-                  <button 
-                    onClick={() => generatePDF(client)}
-                    className="w-full md:w-auto px-4 py-3 bg-white/5 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase italic transition-all border border-white/10 flex items-center justify-center gap-2"
-                  >
-                    <span>📄</span> PDF
-                  </button>
+                  {/* Loans */}
+                  {clientLoans.length > 0 && (
+                    <div>
+                      <p className="text-[9px] font-black uppercase text-white/30 tracking-widest mb-2">EMPRSTIMOS ({clientLoans.length})</p>
+                      <div className="space-y-1">
+                        {clientLoans.map((loan, idx) => (
+                          <div key={loan.id} className="flex items-center justify-between bg-white/3 rounded-xl px-3 py-2 gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-black text-white">#{idx + 1}  {formatCurrency(loan.originalAmount || loan.amount)}</p>
+                              <p className="text-[9px] text-white/30">{(loan.loanDate || '').replace(/-/g,'/')}  {loan.loanType === 'recorrente' ? 'Recorrente' : 'Parcelado'}</p>
+                            </div>
+                            <span className={`shrink-0 text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${loan.status === 'paid' ? 'bg-white/8 text-white/25' : 'bg-emerald-500/15 text-emerald-400'}`}>
+                              {loan.status === 'paid' ? 'Quitado' : 'Ativo'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Payment history */}
+                  {clientPayments.length > 0 && (
+                    <div>
+                      <p className="text-[9px] font-black uppercase text-white/30 tracking-widest mb-2">HISTRICO ({clientPayments.length} pgtos)</p>
+                      <div className="space-y-0.5 max-h-44 overflow-y-auto pr-1">
+                        {[...clientPayments].reverse().map((p, i) => (
+                          <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/3 transition-colors">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${p.type === 'interest' ? 'bg-emerald-400' : 'bg-blue-400'}`} />
+                              <span className="text-[10px] text-white/40">{(p.date || '').replace(/-/g,'/')}</span>
+                              <span className="text-[9px] text-white/25 uppercase">{p.type === 'interest' ? 'Juros' : 'Capital'}</span>
+                            </div>
+                            <span className={`text-xs font-black shrink-0 ${p.type === 'interest' ? 'text-emerald-400' : 'text-blue-400'}`}>{formatCurrency(p.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary + PDF */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-white/5">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-[8px] text-white/25 uppercase tracking-widest mb-0.5">Total Empr.</p>
+                        <p className="text-sm font-black text-white">{formatCurrency(totalLent)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] text-white/25 uppercase tracking-widest mb-0.5">Juros Pagos</p>
+                        <p className="text-sm font-black text-emerald-400">{formatCurrency(totalInterestPaid)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] text-white/25 uppercase tracking-widest mb-0.5">Saldo Dev.</p>
+                        <p className={`text-sm font-black ${activeBalance > 0 ? 'text-emerald-400' : 'text-white/20'}`}>{formatCurrency(activeBalance)}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={e => { e.stopPropagation(); generatePDF(client); }}
+                      className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase italic transition-all border border-white/10 whitespace-nowrap"
+                    >
+                      <span></span> PDF
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           );
         })}
+        {filtered.length === 0 && (
+          <div className="text-center py-16 text-white/20 text-sm italic">
+            Nenhum cliente encontrado.
+          </div>
+        )}
       </div>
     </div>
   );

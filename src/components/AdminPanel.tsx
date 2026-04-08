@@ -182,7 +182,7 @@ const AdminPanel: React.FC = () => {
                     setUserToDelete(null);
                     return;
                   }
-                  await supabaseService.updateProfileStatus(userToDelete.userId, 'pausado');
+                  await supabaseService.deleteProfile(userToDelete.userId);
                   setUserToDelete(null);
                   loadAdminData();
                 }}
