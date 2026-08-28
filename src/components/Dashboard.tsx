@@ -8,12 +8,13 @@ interface DashboardProps {
   data: AppData;
   theme: 'rubro' | 'bw' | 'emerald';
   onFilterChange: (filter: 'all' | 'critical' | 'overdue' | 'today' | 'tomorrow' | 'active' | 'inactive') => void;
+  onOpenClient?: (clientId: string) => void;
   onUpdateLogo?: (base64: string) => void;
 }
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'total';
 
-const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange }) => {
+const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange, onOpenClient }) => {
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('total');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
@@ -236,7 +237,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange }) => {
             const status = loan.statusBucket === 'critical' ? `🟣 ${daysLate ?? 0}d vencido` : loan.statusBucket === 'overdue' ? `🔴 ${daysLate ?? 0}d vencido` : loan.statusBucket === 'today' ? '🔵 Vence hoje' : loan.statusBucket === 'tomorrow' ? '🟡 Vence amanhã' : '🟢 Ativo'
             const phone = (client?.phone || '').replace(/\D/g, '')
             return (
-              <article key={loan.id} className={`min-w-0 rounded-xl border-l-[3px] border border-white/10 bg-[#111b30] p-2.5 ${accent}`}>
+              <article key={loan.id} onClick={() => onOpenClient?.(loan.clientId)} className={`min-w-0 cursor-pointer rounded-xl border-l-[3px] border border-white/10 bg-[#111b30] p-2.5 transition-colors hover:bg-white/10 ${accent}`} role="button" tabIndex={0}>
                 <div className="flex items-start justify-between gap-1">
                   <p className="truncate text-[10px] font-black text-white/85">{status}</p>
                   {phone && <a href={`https://wa.me/55${phone}`} target="_blank" rel="noopener noreferrer" aria-label={`WhatsApp de ${client?.name || 'cliente'}`} className="shrink-0 text-green-400 text-base">◉</a>}
