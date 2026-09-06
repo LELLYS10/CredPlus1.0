@@ -95,13 +95,13 @@ const PreRegisterForm: React.FC<PreRegisterFormProps> = ({ userId }) => {
   if (success) {
     return (
       <div className="min-h-screen bg-[#0a1629] flex flex-col items-center justify-center p-6">
-        <div className="glass max-w-md w-full p-8 rounded-[32px] border border-emerald-500/20 text-center">
+        <div className="glass max-w-md w-full p-8 rounded-[32px] border border-gold-500/20 text-center">
           <div className="text-6xl mb-6">✅</div>
           <h2 className="text-xl font-black text-white uppercase italic mb-4">Cadastro Enviado!</h2>
           <p className="text-sm text-white/60 italic leading-relaxed mb-6">
             Dados recebidos com sucesso. Entraremos em contato em breve pelo WhatsApp.
           </p>
-          <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">
+          <p className="text-[10px] text-gold-400 font-bold uppercase tracking-widest">
             CredPlus — Gestão de Empréstimos
           </p>
         </div>
@@ -114,7 +114,7 @@ const PreRegisterForm: React.FC<PreRegisterFormProps> = ({ userId }) => {
       <div className="glass max-w-md w-full p-8 rounded-[32px] border border-white/10">
         <div className="text-center mb-8">
           <h2 className="text-lg font-black text-white uppercase italic mb-2">Novo Cliente</h2>
-          <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest">Preencha seus dados</p>
+          <p className="text-xs text-gold-400 font-bold uppercase tracking-widest">Preencha seus dados</p>
         </div>
 
         {error && (
@@ -135,7 +135,7 @@ const PreRegisterForm: React.FC<PreRegisterFormProps> = ({ userId }) => {
               onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
               placeholder="Seu nome completo"
               required
-              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-emerald-500/50 outline-none transition-all"
+              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-gold-500/50 outline-none transition-all"
             />
           </div>
 
@@ -150,7 +150,7 @@ const PreRegisterForm: React.FC<PreRegisterFormProps> = ({ userId }) => {
               onChange={e => setFormData(p => ({ ...p, phone: formatPhone(e.target.value) }))}
               placeholder="(11) 99999-9999"
               required
-              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-emerald-500/50 outline-none transition-all"
+              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-gold-500/50 outline-none transition-all"
             />
           </div>
 
@@ -165,7 +165,7 @@ const PreRegisterForm: React.FC<PreRegisterFormProps> = ({ userId }) => {
               onChange={e => setFormData(p => ({ ...p, cpf: formatCPF(e.target.value) }))}
               placeholder="000.000.000-00"
               maxLength={14}
-              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-emerald-500/50 outline-none transition-all"
+              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-gold-500/50 outline-none transition-all"
             />
           </div>
 
@@ -179,7 +179,7 @@ const PreRegisterForm: React.FC<PreRegisterFormProps> = ({ userId }) => {
               value={formData.referredBy}
               onChange={e => setFormData(p => ({ ...p, referredBy: e.target.value }))}
               placeholder="Nome de quem indicou"
-              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-emerald-500/50 outline-none transition-all"
+              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-gold-500/50 outline-none transition-all"
             />
           </div>
 
@@ -193,7 +193,7 @@ const PreRegisterForm: React.FC<PreRegisterFormProps> = ({ userId }) => {
               value={formData.desiredAmount}
               onChange={e => setFormData(p => ({ ...p, desiredAmount: e.target.value }))}
               placeholder="Ex: 5.000,00"
-              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-emerald-500/50 outline-none transition-all"
+              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-gold-500/50 outline-none transition-all"
             />
           </div>
 
@@ -207,14 +207,14 @@ const PreRegisterForm: React.FC<PreRegisterFormProps> = ({ userId }) => {
               onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))}
               placeholder="Informe seu endereço completo com CEP."
               rows={3}
-              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-emerald-500/50 outline-none transition-all resize-none"
+              className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 px-4 text-sm font-bold text-white focus:border-gold-500/50 outline-none transition-all resize-none"
             />
           </div>
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-emerald-500 text-white font-black uppercase italic text-sm py-4 rounded-2xl mt-6 hover:bg-emerald-400 transition-all disabled:opacity-50"
+            className="w-full bg-gold-500 text-white font-black uppercase italic text-sm py-4 rounded-2xl mt-6 hover:bg-gold-400 transition-all disabled:opacity-50"
           >
             {isSubmitting ? 'Enviando...' : 'Cadastrar'}
           </button>

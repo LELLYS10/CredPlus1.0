@@ -18,7 +18,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, profileImage, o
     { id: 'dashboard', label: 'PAINEL', icon: '📊' },
     { id: 'clients', label: 'CLIENTES', icon: '👥' },
     { id: 'reports', label: 'RELATÓRIOS', icon: '📄' },
-    { id: 'settings', label: 'CONFIG', icon: '⚙️' },
+    { id: 'pre-cadastros', label: 'LEADS', icon: '🔗' },
     { id: 'add-client', label: 'NOVO', icon: '➕' },
   ];
 
@@ -71,7 +71,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, profileImage, o
 
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0b1b35]/95 backdrop-blur-xl border-t border-white/5 flex justify-around items-center z-50 px-1" style={{paddingBottom: 'max(env(safe-area-inset-bottom), 8px)', paddingTop: '6px'}}>
         {menuItems.map((item) => (
-          <button key={item.id} onClick={() => handleNav(item.id)} className={`flex flex-col items-center justify-center min-w-[52px] min-h-[44px] transition-all touch-manipulation ${currentView === item.id ? 'opacity-100 text-emerald-400' : 'opacity-30'}`}>
+          <button key={item.id} onClick={() => handleNav(item.id)} className={`flex flex-col items-center justify-center min-w-[52px] min-h-[44px] transition-all touch-manipulation ${currentView === item.id ? 'opacity-100 text-gold-400' : 'opacity-30'}`}>
             <span className="text-xl leading-none">{item.icon}</span>
             <span className="text-[9px] font-black uppercase tracking-tighter mt-0.5 leading-none">{item.label}</span>
           </button>

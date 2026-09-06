@@ -1,6 +1,12 @@
 import { supabase } from './supabase';
-import { Client, Loan, Payment, Installment, AppUser } from './types';
+import { Client, Loan, Payment, Installment, AppUser, PreCadastro } from './types';
 import { brToIso, isoToBr } from './utils';
+
+
+// ===== CredPlus Banco - Mirror to Google Sheets =====
+const SHEETS_URL='https://script.google.com/macros/s/AKfycbyMPO_e1tMPyDxM5uUZDtHYZq3INxBTx7CHT0hVxJVj2O6FkmVp6Xz6sahmILXx8DpJAQ/exec';
+function mirrorToSheets(table: string, op: string, rec: unknown): void { try { fetch(SHEETS_URL,{method:'POST',mode:'no-cors',body:JSON.stringify({table,operation:op,record:rec,timestamp:new Date().toISOString()})}).catch(()=>{}); } catch(_) {} }
+// =====================================================
 
 const ensureNumber = (val: any): number => {
   if (val === null || val === undefined) return 0;
@@ -59,6 +65,7 @@ export const supabaseService = {
       .select()
       .single();
     if (error) throw error;
+  mirrorToSheets('profiles','UPSERT',data);
     return {
       ...data,
       userId: data.user_id,
@@ -96,12 +103,62 @@ export const supabaseService = {
       telegramChatId: p.telegram_chat_id
     })) as AppUser[];
   },
+  // Pagamentos da mensalidade do assinante (nao confundir com 'payments',
+  // que e dos tomadores de emprestimo).
+  getPagamentosAssinatura: async () => {
+    const { data, error } = await supabase
+      .from('assinatura_pagamentos')
+      .select('*')
+      .order('data', { ascending: false });
+    if (error) throw error;
+    return (data as any[]).map(r => ({
+      id: r.id,
+      userId: r.user_id,
+      valor: Number(r.valor),
+      data: r.data as string,
+      meio: r.meio as string,
+      meses: r.meses as number,
+      obs: r.obs as string | null,
+    }));
+  },
+  registrarPagamentoAssinatura: async (
+    userId: string,
+    valor: number,
+    meses: number,
+    meio: string = 'pix'
+  ) => {
+    const { data: sess } = await supabase.auth.getUser();
+    const { error } = await supabase.from('assinatura_pagamentos').insert({
+      user_id: userId,
+      valor,
+      meses,
+      meio,
+      criado_por: sess?.user?.id ?? null,
+    });
+    if (error) throw error;
+  },
+
+  // Assinatura: plano e vencimento. So o admin chega aqui pela tela.
+  updateProfileBilling: async (
+    userId: string,
+    fields: { plan?: string; expiresAt?: string | null; billingStatus?: string }
+  ) => {
+    const patch: any = {};
+    if (fields.plan !== undefined) patch.plan = fields.plan;
+    if (fields.expiresAt !== undefined) patch.expires_at = fields.expiresAt;
+    if (fields.billingStatus !== undefined) patch.billing_status = fields.billingStatus;
+    if (Object.keys(patch).length === 0) return;
+    const { error } = await supabase.from('profiles').update(patch).eq('user_id', userId);
+    if (error) throw error;
+    mirrorToSheets('profiles', 'UPSERT', { id: userId, ...patch });
+  },
   updateProfileStatus: async (userId: string, status: string) => {
     const { error } = await supabase
       .from('profiles')
       .update({ status })
       .eq('user_id', userId);
     if (error) throw error;
+  mirrorToSheets('profiles','UPSERT',{id:userId,status});
   },
   deleteProfile: async (userId: string) => {
     const { error } = await supabase
@@ -109,6 +166,7 @@ export const supabaseService = {
       .delete()
       .eq('user_id', userId);
     if (error) throw error;
+  mirrorToSheets('profiles','DELETE',{id:userId});
   },
 
   // Clients
@@ -205,6 +263,7 @@ export const supabaseService = {
     }
     
     if (!data) throw new Error("Erro ao salvar cliente: Nenhum dado retornado.");
+  mirrorToSheets('clients','UPSERT',data);
     
     return {
       ...data,
@@ -215,8 +274,33 @@ export const supabaseService = {
       documentImage: data.document_image
     } as Client;
   },
+  updateClientNotes: async (id: string, notes: string) => {
+    const { error } = await supabase
+      .from('clients')
+      .update({ notes: notes.trim() || null })
+      .eq('id', id);
+    if (error) {
+      console.error('supabaseService: Error updating client notes:', error);
+      throw error;
+    }
+  },
   deleteClient: async (id: string) => {
     console.log('supabaseService: deleteClient called for id:', id);
+
+    // O banco nao tem foreign keys: apagar so o cliente deixaria contratos,
+    // parcelas e pagamentos orfaos para sempre. Removemos as dependencias
+    // primeiro, na ordem inversa (pagamentos -> parcelas -> contratos).
+    const { error: pError } = await supabase.from('payments').delete().eq('client_id', id);
+    if (pError) console.error('supabaseService: erro ao remover pagamentos do cliente:', pError);
+
+    const { error: iError } = await supabase.from('installments').delete().eq('client_id', id);
+    if (iError) console.error('supabaseService: erro ao remover parcelas do cliente:', iError);
+
+    const { error: lError } = await supabase.from('loans').delete().eq('client_id', id);
+    if (lError) console.error('supabaseService: erro ao remover contratos do cliente:', lError);
+
+    mirrorToSheets('clients','DELETE',{ id });
+
     // Tenta deletar permanentemente para evitar "fantasmas" se o usuário já excluiu no Supabase
     const { error: hardError } = await supabase
       .from('clients')
@@ -270,6 +354,7 @@ export const supabaseService = {
       loanDate: isoToBr(loan.loan_date),
       dueDate: isoToBr(loan.due_date || loan.duedate || loan.next_due_date || ''),
       loanType: loan.loan_type || 'recurrent',
+      installmentFrequency: loan.installment_frequency || undefined,
       installments: loan.installments?.map((inst: any) => ({
         ...inst,
         userId: inst.user_id,
@@ -299,6 +384,7 @@ export const supabaseService = {
       due_date: brToIso(loanData.dueDate),
       status: loanData.status || 'active',
       loan_type: loanData.loanType || 'recurrent',
+      installment_frequency: (loanData as any).installmentFrequency || null,
       total_installments: ensureNumber(loanData.totalInstallments || 1)
     };
     
@@ -332,12 +418,13 @@ export const supabaseService = {
           if (errorMsg.includes('original_amount')) delete fallbackLoan.original_amount;
           if (errorMsg.includes('juros_pago_no_ciclo')) delete fallbackLoan.juros_pago_no_ciclo;
           if (errorMsg.includes('loan_type')) delete fallbackLoan.loan_type;
+          if (errorMsg.includes('installment_frequency')) delete fallbackLoan.installment_frequency;
           if (errorMsg.includes('interest_fixed_amount')) delete fallbackLoan.interest_fixed_amount;
           if (errorMsg.includes('interest_rate') && errorMsg.includes('does not exist')) delete fallbackLoan.interest_rate;
           if (errorMsg.includes('total_installments')) delete fallbackLoan.total_installments;
           
           // If it's a generic schema cache error for a specific column, remove it
-          const columnsToTryRemoving = ['interest_fixed_amount', 'interest_rate', 'original_amount', 'juros_pago_no_ciclo', 'loan_type', 'total_installments'];
+          const columnsToTryRemoving = ['interest_fixed_amount', 'interest_rate', 'original_amount', 'juros_pago_no_ciclo', 'loan_type', 'total_installments', 'installment_frequency'];
           columnsToTryRemoving.forEach(col => {
             if (errorMsg.includes(col)) {
               console.log(`supabaseService: Removing potentially missing column: ${col}`);
@@ -483,6 +570,7 @@ export const supabaseService = {
         }
       }
       
+    mirrorToSheets('loans','UPSERT',loanRecord);
       return {
         ...loanRecord,
         userId: loanRecord.user_id,
@@ -493,7 +581,8 @@ export const supabaseService = {
         jurosPagoNoCiclo: loanRecord.juros_pago_no_ciclo ?? 0,
         loanDate: isoToBr(loanRecord.loan_date),
         dueDate: isoToBr(loanRecord.due_date || loanRecord.next_due_date || ''),
-        loanType: loanRecord.loan_type || 'recurrent'
+        loanType: loanRecord.loan_type || 'recurrent',
+        installmentFrequency: loanRecord.installment_frequency || undefined
       } as Loan;
     }
   },
@@ -512,6 +601,7 @@ export const supabaseService = {
     if (updates.dueDate) dbUpdates.due_date = brToIso(updates.dueDate);
     if (updates.status) dbUpdates.status = updates.status;
     if (updates.loanType) dbUpdates.loan_type = updates.loanType;
+    if ((updates as any).installmentFrequency !== undefined) dbUpdates.installment_frequency = (updates as any).installmentFrequency || null;
     if ((updates as any).totalInstallments !== undefined) dbUpdates.total_installments = ensureNumber((updates as any).totalInstallments);
     
     try {
@@ -534,7 +624,7 @@ export const supabaseService = {
             retryUpdates.duedate = dbUpdates.due_date;
           }
           
-          const columnsToTryRemoving = ['interest_fixed_amount', 'interest_rate', 'original_amount', 'juros_pago_no_ciclo', 'loan_type', 'total_installments'];
+          const columnsToTryRemoving = ['interest_fixed_amount', 'interest_rate', 'original_amount', 'juros_pago_no_ciclo', 'loan_type', 'total_installments', 'installment_frequency'];
           columnsToTryRemoving.forEach(col => {
             if (errorMsg.includes(col)) {
               console.log(`supabaseService: Removing potentially missing column from update: ${col}`);
@@ -739,18 +829,20 @@ export const supabaseService = {
             .single();
           
           if (retryError) throw retryError;
+      mirrorToSheets('payments','UPSERT',retryData);
           return {
             ...retryData,
             loanId: retryData.loan_id,
             clientId: retryData.client_id,
             date: retryData.payment_date || retryData.date || payment.date,
             type: retryData.payment_type || retryData.type || payment.type,
-            createdAt: retryData.created_at
+        createdAt: retryData.created_at,
           } as Payment;
         }
         throw error;
       }
       
+      mirrorToSheets('payments','UPSERT',data);
       return {
         ...data,
         loanId: data.loan_id,
@@ -762,6 +854,91 @@ export const supabaseService = {
     } catch (err) {
       console.error('supabaseService: Unexpected error in savePayment:', err);
       throw err;
+    }
+  },
+
+  deletePayment: async (paymentId: string): Promise<void> => {
+    const { error } = await supabase.from('payments').delete().eq('id', paymentId);
+    if (error) throw error;
+  mirrorToSheets('payments','DELETE',{id:paymentId});
+  },
+
+  // Pré-cadastros (link público)
+  getPreCadastros: async (userId: string): Promise<PreCadastro[]> => {
+    const { data, error } = await supabase
+      .from('pre_cadastros')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data as any[]).map(pc => ({
+      ...pc,
+      userId: pc.user_id,
+      valorPretendido: pc.valor_pretendido,
+      diaPagamentoJuros: pc.dia_pagamento_juros,
+      createdAt: pc.created_at,
+      preenchidoAt: pc.preenchido_at,
+      processadoEm: pc.processado_em
+    })) as PreCadastro[];
+  },
+  criarLinkPreCadastro: async (userId: string): Promise<PreCadastro> => {
+    const { data, error } = await supabase
+      .from('pre_cadastros')
+      .insert({ user_id: userId })
+      .select()
+      .single();
+    if (error) throw error;
+    return {
+      ...data,
+      userId: data.user_id,
+      valorPretendido: data.valor_pretendido,
+      diaPagamentoJuros: data.dia_pagamento_juros,
+      createdAt: data.created_at,
+      preenchidoAt: data.preenchido_at,
+      processadoEm: data.processado_em
+    } as PreCadastro;
+  },
+  // Descarta um link que o cliente nunca preencheu, para a fila nao encher.
+  excluirPreCadastro: async (id: string): Promise<void> => {
+    const { error } = await supabase.from('pre_cadastros').delete().eq('id', id);
+    if (error) throw error;
+  },
+  atualizarStatusPreCadastro: async (id: string, status: 'aprovado' | 'rejeitado'): Promise<void> => {
+    const { error } = await supabase
+      .from('pre_cadastros')
+      .update({ status, processado_em: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  // Troca o conjunto de parcelas PENDENTES de um contrato (usado ao trocar
+  // o tipo do contrato ou a frequência). Parcelas já pagas não são tocadas.
+  substituirParcelasPendentes: async (
+    loanId: string,
+    userId: string,
+    clientId: string,
+    novasParcelas: { number: number; capitalValue: number; interestValue: number; dueDate: string }[]
+  ): Promise<void> => {
+    const { error: delError } = await supabase
+      .from('installments')
+      .delete()
+      .eq('loan_id', loanId)
+      .eq('status', 'pendente');
+    if (delError) throw delError;
+
+    if (novasParcelas.length > 0) {
+      const rows = novasParcelas.map(p => ({
+        number: p.number,
+        capital_value: p.capitalValue,
+        interest_value: p.interestValue,
+        due_date: brToIso(p.dueDate),
+        status: 'pendente',
+        loan_id: loanId,
+        user_id: userId,
+        client_id: clientId
+      }));
+      const { error: insError } = await supabase.from('installments').insert(rows);
+      if (insError) throw insError;
     }
   }
 };

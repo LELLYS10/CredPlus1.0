@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Client, Loan, Payment } from '../types';
 import { formatCurrency, brToIso, getBrTodayISO, diasDeAtraso } from '../utils';
 import ClientHistoryModal from './ClientHistoryModal';
+import ClientNoteBanner from './ClientNoteBanner';
 
 interface ClientListProps {
   clients: Client[];
@@ -21,6 +22,7 @@ interface ClientListProps {
   onUpdateInstallmentDate: (instId: string, newDate: string) => Promise<void>;
   onDeleteClient: (clientId: string) => void;
   onDeletePayment?: (paymentId: string, loanId: string, amount: number, type: string, date: string) => Promise<void>;
+  onUpdateClientNotes: (clientId: string, notes: string) => Promise<void>;
   focusClientId?: string | null;
 }
 
@@ -49,7 +51,7 @@ const tipoContratoInfo = (loan: Loan) => {
 };
 
 const ClientList: React.FC<ClientListProps> = ({
-  clients, loans, payments, activeFilter, searchTerm, setSearchTerm, setActiveFilter, onAddLoan, onPayInterest, onPayInstallment, onAmortize, onAddCapital, onEditLoan, onUpdateInstallmentDate, onDeleteClient, onDeletePayment, focusClientId
+  clients, loans, payments, activeFilter, searchTerm, setSearchTerm, setActiveFilter, onAddLoan, onPayInterest, onPayInstallment, onAmortize, onAddCapital, onEditLoan, onUpdateInstallmentDate, onDeleteClient, onDeletePayment, onUpdateClientNotes, focusClientId
 }) => {
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
   const [historyClientId, setHistoryClientId] = useState<string | null>(null);
@@ -240,6 +242,7 @@ const ClientList: React.FC<ClientListProps> = ({
             >
               ← Voltar
             </button>
+                  <ClientNoteBanner client={client} onUpdateNotes={onUpdateClientNotes} compact />
                   {/* Resumo dos Empréstimos */}
                   {cLoans.map(loan => {
                     const info = getLoanInfo(loan);

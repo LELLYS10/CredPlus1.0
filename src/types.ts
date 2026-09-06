@@ -59,9 +59,10 @@ export interface Loan {
   dueDate: string;
   status: 'active' | 'paid' | 'overdue';
   loanType: 'recurrent' | 'installments';
+  installmentFrequency?: 'monthly' | 'weekly';
   interestRate: number;
   totalInstallments?: number;
-  statusBucket?: 'overdue' | 'today' | 'tomorrow' | 'active';
+  statusBucket?: 'critical' | 'overdue' | 'today' | 'tomorrow' | 'active';
   installments?: Installment[];
 }
 
@@ -72,12 +73,36 @@ export interface Payment {
   clientId: string;
   amount: number;
   date: string;
-  type: 'interest' | 'capital';
+  type: 'interest' | 'capital' | 'discount' | 'surcharge';
   createdAt: string;
+}
+
+export interface PreCadastro {
+  id: string;
+  userId: string;
+  token: string;
+  status: 'pendente' | 'preenchido' | 'aprovado' | 'rejeitado';
+  nome?: string | null;
+  cpf?: string | null;
+  telefone?: string | null;
+  rua?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  estado?: string | null;
+  cep?: string | null;
+  valorPretendido?: number | null;
+  modalidade?: 'recurrent' | 'installments' | null;
+  diaPagamentoJuros?: number | null;
+  createdAt: string;
+  preenchidoAt?: string | null;
+  processadoEm?: string | null;
 }
 
 export interface DashboardStats {
   totalActiveCapital: number;
+  criticalCount: number;
   overdueCount: number;
   dueTodayCount: number;
   dueTomorrowCount: number;

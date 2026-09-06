@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+@theme {
+  --color-gold-50: #faf7ee;
+  --color-gold-100: #f4ebd6;
+  --color-gold-200: #e9d7ae;
+  --color-gold-300: #dcc07e;
+  --color-gold-400: #d2ac55;
+  --color-gold-500: #b99031;
+  --color-gold-600: #917126;
+  --color-gold-700: #70571d;
+  --color-gold-800: #544116;
+  --color-gold-900: #3c2f10;
+  --color-gold-950: #241c09;
+}
+
 @layer components {
   .glass {
     @apply bg-white/5 backdrop-blur-xl border border-white/10;

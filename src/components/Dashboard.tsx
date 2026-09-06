@@ -15,7 +15,9 @@ interface DashboardProps {
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'total';
 
 const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange, onOpenClient }) => {
-  const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('total');
+  // Juros e capital recebidos sao contadores do MES corrente (viram o mes, zeram).
+  // Por isso a tela abre no mes, nao no acumulado geral.
+  const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('monthly');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const stats = React.useMemo(() => {
@@ -51,9 +53,28 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange, onOpenClien
     };
   }, [data]);
 
+  // Capital em transito = capital que ainda esta na rua. Nao zera no virar do mes:
+  // so cai quando o cliente devolve capital. No parcelado o saldo do contrato nao e
+  // abatido parcela a parcela, entao o que vale e a soma do capital das parcelas
+  // que ainda estao pendentes.
+  const capitalEmTransito = React.useMemo(() => {
+    const ativos = (data.loans || []).filter(l => l.status !== 'paid' && (l as any).statusBucket !== 'paid');
+    return ativos.reduce((acc, l) => {
+      if (l.loanType === 'installments' && l.installments && l.installments.length > 0) {
+        return acc + l.installments
+          .filter(i => i.status === 'pendente')
+          .reduce((soma, i) => soma + (i.capitalValue || 0), 0);
+      }
+      return acc + l.amount;
+    }, 0);
+  }, [data.loans]);
+
+  const rotuloPeriodo = reportPeriod === 'daily' ? 'HOJE' : reportPeriod === 'monthly' ? 'NO MÊS' : 'GERAL';
+
   const displayInterest = React.useMemo(() => {
     const payments = data.payments || [];
-    const interestPayments = payments.filter(p => p.type === 'interest');
+    // Acrescimo cobrado tambem e lucro, entao entra junto com o juros.
+    const interestPayments = payments.filter(p => p.type === 'interest' || p.type === 'surcharge');
     if (reportPeriod === 'daily') {
       return interestPayments.filter(p => isDueToday(p.date)).reduce((acc, p) => acc + p.amount, 0);
     } else if (reportPeriod === 'monthly') {
@@ -109,7 +130,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange, onOpenClien
       const tableData = monthlyPayments.map(p => [
         (p.date || '').replace(/-/g, '/'),
         getClientName(p.clientId),
-        p.type === 'interest' ? 'JUROS' : 'CAPITAL',
+        p.type === 'interest' ? 'JUROS' : p.type === 'discount' ? 'DESCONTO' : p.type === 'surcharge' ? 'ACRÉSCIMO' : 'CAPITAL',
         formatCurrency(p.amount)
       ]);
 
@@ -164,14 +185,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange, onOpenClien
         </div>
       </div>
 
-      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 gap-2 md:gap-4">
         <div className="relative group">
           <div className="absolute -inset-0.5 bg-gold-500/30 rounded-[24px] md:rounded-[32px] blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
           <div className="relative bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[24px] md:rounded-[32px] p-3.5 md:p-5 flex justify-between items-center overflow-hidden">
             <div className="absolute right-0 top-0 w-24 h-24 bg-gold-500/5 blur-3xl rounded-full"></div>
             <div className="space-y-0.5 md:space-y-1">
-              <p className="text-[7px] md:text-[8px] font-black text-gold-400/50 uppercase tracking-[0.3em] italic">CAPITAL EM TRÂNSITO</p>
-              <h2 className="text-xl md:text-3xl font-black tracking-tighter text-white drop-shadow-sm">{formatCurrency(stats.totalActiveCapital)}</h2>
+              <p className="text-[7px] md:text-[8px] font-black text-gold-400/50 uppercase tracking-[0.3em] italic leading-tight">CAPITAL EM TRÂNSITO</p>
+              <h2 className="text-base md:text-3xl font-black tracking-tighter text-white drop-shadow-sm truncate">{formatCurrency(capitalEmTransito)}</h2>
             </div>
             <div className="bg-gold-500/10 p-2.5 md:p-3 rounded-xl md:rounded-2xl border border-gold-500/20">
                <svg className="w-5 h-5 md:w-6 md:h-6 text-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
@@ -184,8 +205,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange, onOpenClien
           <div className="relative bg-white/5 backdrop-blur-2xl border border-white/5 rounded-[24px] md:rounded-[32px] p-3.5 md:p-5 flex justify-between items-center overflow-hidden">
             <div className="absolute right-0 top-0 w-24 h-24 bg-gold-500/5 blur-3xl rounded-full"></div>
             <div className="space-y-0.5 md:space-y-1">
-              <p className="text-[7px] md:text-[8px] font-black text-gold-400/50 uppercase tracking-[0.3em] italic">LUCRO TOTAL (JUROS)</p>
-              <h2 className="text-xl md:text-3xl font-black tracking-tighter text-gold-400 drop-shadow-sm">{formatCurrency(displayInterest)}</h2>
+              <p className="text-[7px] md:text-[8px] font-black text-gold-400/50 uppercase tracking-[0.3em] italic leading-tight">JUROS RECEBIDOS · {rotuloPeriodo}</p>
+              <h2 className="text-base md:text-3xl font-black tracking-tighter text-gold-400 drop-shadow-sm truncate">{formatCurrency(displayInterest)}</h2>
             </div>
             <div className="bg-gold-500/10 p-2.5 md:p-3 rounded-xl md:rounded-2xl border border-gold-500/20">
                <svg className="w-5 h-5 md:w-6 md:h-6 text-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -194,14 +215,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange, onOpenClien
         </div>
       </div>
 
-      <div className="hidden md:flex bg-white/5 border border-white/5 rounded-2xl px-4 py-2.5 items-center justify-between gap-3">
+      <div className="flex bg-white/5 border border-white/5 rounded-2xl px-4 py-2.5 items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="bg-gold-500/10 p-1.5 rounded-lg border border-gold-500/20">
             <svg className="w-3.5 h-3.5 text-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 14l6-6m0 0H9m6 0v6M5 5h14v14H5V5z" opacity="0"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12a8 8 0 11-16 0 8 8 0 0116 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v8m-3-3l3 3 3-3"/></svg>
           </div>
-          <span className="text-[7px] md:text-[8px] font-black text-gold-400/50 uppercase tracking-[0.3em] italic">Capital Recebido</span>
+          <span className="text-[7px] md:text-[8px] font-black text-gold-400/50 uppercase tracking-[0.3em] italic leading-tight">Capital Recebido · {rotuloPeriodo}</span>
         </div>
-        <span className="text-sm md:text-base font-black text-white tracking-tighter">{formatCurrency(displayCapitalRecebido)}</span>
+        <span className="text-sm md:text-base font-black text-white tracking-tighter shrink-0">{formatCurrency(displayCapitalRecebido)}</span>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">

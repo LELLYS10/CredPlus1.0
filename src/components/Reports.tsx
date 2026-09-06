@@ -1,24 +1,28 @@
 import React, { useState, useMemo } from 'react';
 import { Client, Loan, Payment, AppData } from '../types';
 import { formatCurrency, isoToBr } from '../utils';
+import { Trash2 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 interface ReportsProps {
   data: AppData;
+  onDeletePayment?: (paymentId: string, loanId: string, amount: number, type: string, date: string) => Promise<void>;
 }
 
-const Reports: React.FC<ReportsProps> = ({ data }) => {
+const Reports: React.FC<ReportsProps> = ({ data, onDeletePayment }) => {
   const { clients, loans, payments } = data;
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const generatePDF = (client: Client) => {
     const doc = new jsPDF();
     const clientLoans = loans.filter(l => l.clientId === client.id);
+    const brToIsoLocal = (d: string) => { const p = d.split('-'); return p.length === 3 && p[0].length !== 4 ? p[2]+'-'+p[1]+'-'+p[0] : d; };
     const clientPayments = payments
       .filter(p => p.clientId === client.id)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      .sort((a, b) => brToIsoLocal(a.date).localeCompare(brToIsoLocal(b.date)));
 
     const activeBalance = clientLoans.filter(l => l.status !== 'paid').reduce((acc, l) => acc + l.amount, 0);
 
@@ -46,7 +50,7 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
     let currentY = 75;
     clientLoans.forEach((loan, index) => {
       doc.setFont('courier', 'bold');
-      doc.text(`${index + 1}. ${formatCurrency(loan.originalAmount)} em ${loan.loanDate}`, 14, currentY);
+      doc.text(`${index + 1}. ${formatCurrency(loan.originalAmount)} em ${(loan.loanDate || '').replace(/-/g, '/')}`, 14, currentY);
       doc.setFont('helvetica', 'normal');
       doc.text(`Juros: ${((loan.interestFixedAmount / loan.originalAmount) * 100).toFixed(0)}% ao mês`, 14, currentY + 5);
       doc.text(`Tipo: ${loan.loanType === 'recurrent' ? 'Recorrente' : 'Parcelado'}`, 14, currentY + 10);
@@ -79,7 +83,7 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
         if (currentY > 270) { doc.addPage(); currentY = 20; }
         doc.setFont('helvetica', 'normal');
         const dateStr = (p.date || '').replace(/-/g, '/');
-        const typeStr = p.type === 'interest' ? 'Juros' : 'Capital';
+        const typeStr = p.type === 'interest' ? 'Juros' : p.type === 'discount' ? 'Desconto concedido' : p.type === 'surcharge' ? 'Acréscimo cobrado' : 'Capital';
         
         // Find installment number if applicable
         let desc = typeStr;
@@ -131,9 +135,10 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
   const clientStats = useMemo(() =>
     clients.map(client => {
       const clientLoans = loans.filter(l => l.clientId === client.id);
+      const brToIsoLocal2 = (d: string) => { const p = d.split('-'); return p.length === 3 && p[0].length !== 4 ? p[2]+'-'+p[1]+'-'+p[0] : d; };
       const clientPayments = payments
         .filter(p => p.clientId === client.id)
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        .sort((a, b) => brToIsoLocal2(a.date).localeCompare(brToIsoLocal2(b.date)));
       const totalLent = clientLoans.reduce((acc, l) => acc + (l.originalAmount || l.amount || 0), 0);
       const totalInterestPaid = clientPayments.filter(p => p.type === 'interest').reduce((acc, p) => acc + p.amount, 0);
       const activeBalance = clientLoans.filter(l => l.status !== 'paid').reduce((acc, l) => acc + l.amount, 0);
@@ -154,14 +159,14 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-2">
         <div>
           <h2 className="text-xl font-black uppercase italic text-white">RELATRIOS E EXTRATOS</h2>
-          <p className="text-[10px] text-emerald-400/60 uppercase tracking-widest">VISO GERAL DE CLIENTES</p>
+          <p className="text-[10px] text-gold-400/60 uppercase tracking-widest">VISO GERAL DE CLIENTES</p>
         </div>
         <input
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Buscar por nome ou telefone..."
-          className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none focus:border-emerald-500/50 w-full md:w-72"
+          className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none focus:border-gold-500/50 w-full md:w-72"
         />
       </div>
 
@@ -180,7 +185,7 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
         {filtered.map(({ client, clientLoans, clientPayments, totalLent, totalInterestPaid, activeBalance }) => {
           const isOpen = expandedId === client.id;
           return (
-            <div key={client.id} className={`rounded-2xl overflow-hidden border transition-all duration-200 ${isOpen ? 'border-emerald-500/20 bg-emerald-950/20' : 'border-white/5 bg-white/2 hover:bg-white/4'}`}>
+            <div key={client.id} className={`rounded-2xl overflow-hidden border transition-all duration-200 ${isOpen ? 'border-gold-500/20 bg-gold-950/20' : 'border-white/5 bg-white/2 hover:bg-white/4'}`}>
 
               {/* Compact row - click to expand */}
               <button
@@ -188,7 +193,7 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
                 className="w-full px-4 py-3 flex items-center gap-3 text-left"
               >
                 {/* Avatar */}
-                <div className="shrink-0 w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center font-black text-sm">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-gold-500/15 text-gold-400 flex items-center justify-center font-black text-sm">
                   {client.name.charAt(0).toUpperCase()}
                 </div>
 
@@ -204,16 +209,16 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
                     <p className="text-xs font-black text-white">{formatCurrency(totalLent)}</p>
                   </div>
                   <div className="text-right w-24">
-                    <p className="text-xs font-black text-emerald-400">{formatCurrency(totalInterestPaid)}</p>
+                    <p className="text-xs font-black text-gold-400">{formatCurrency(totalInterestPaid)}</p>
                   </div>
                   <div className="text-right w-24">
-                    <p className={`text-xs font-black ${activeBalance > 0 ? 'text-emerald-400' : 'text-white/20'}`}>{formatCurrency(activeBalance)}</p>
+                    <p className={`text-xs font-black ${activeBalance > 0 ? 'text-gold-400' : 'text-white/20'}`}>{formatCurrency(activeBalance)}</p>
                   </div>
                 </div>
 
                 {/* Saldo mobile only */}
                 <div className="md:hidden text-right shrink-0">
-                  <p className={`text-xs font-black ${activeBalance > 0 ? 'text-emerald-400' : 'text-white/20'}`}>{formatCurrency(activeBalance)}</p>
+                  <p className={`text-xs font-black ${activeBalance > 0 ? 'text-gold-400' : 'text-white/20'}`}>{formatCurrency(activeBalance)}</p>
                   <p className="text-[8px] text-white/25 uppercase">saldo</p>
                 </div>
 
@@ -234,9 +239,9 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
                           <div key={loan.id} className="flex items-center justify-between bg-white/3 rounded-xl px-3 py-2 gap-2">
                             <div className="min-w-0">
                               <p className="text-xs font-black text-white">#{idx + 1}  {formatCurrency(loan.originalAmount || loan.amount)}</p>
-                              <p className="text-[9px] text-white/30">{(loan.loanDate || '').replace(/-/g,'/')}  {loan.loanType === 'recorrente' ? 'Recorrente' : 'Parcelado'}</p>
+                              <p className="text-[9px] text-white/30">{(loan.loanDate || '').replace(/-/g,'/')}  {loan.loanType === 'recurrent' ? 'Recorrente' : 'Parcelado'}</p>
                             </div>
-                            <span className={`shrink-0 text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${loan.status === 'paid' ? 'bg-white/8 text-white/25' : 'bg-emerald-500/15 text-emerald-400'}`}>
+                            <span className={`shrink-0 text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${loan.status === 'paid' ? 'bg-white/8 text-white/25' : 'bg-gold-500/15 text-gold-400'}`}>
                               {loan.status === 'paid' ? 'Quitado' : 'Ativo'}
                             </span>
                           </div>
@@ -251,13 +256,40 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
                       <p className="text-[9px] font-black uppercase text-white/30 tracking-widest mb-2">HISTRICO ({clientPayments.length} pgtos)</p>
                       <div className="space-y-0.5 max-h-44 overflow-y-auto pr-1">
                         {[...clientPayments].reverse().map((p, i) => (
-                          <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/3 transition-colors">
+                          <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors group">
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${p.type === 'interest' ? 'bg-emerald-400' : 'bg-blue-400'}`} />
+                              <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${p.type === 'interest' ? 'bg-gold-400' : p.type === 'discount' ? 'bg-emerald-400' : 'bg-blue-400'}`} />
                               <span className="text-[10px] text-white/40">{(p.date || '').replace(/-/g,'/')}</span>
-                              <span className="text-[9px] text-white/25 uppercase">{p.type === 'interest' ? 'Juros' : 'Capital'}</span>
+                              <span className="text-[9px] text-white/25 uppercase">{p.type === 'interest' ? 'Juros' : p.type === 'discount' ? 'Desconto' : p.type === 'surcharge' ? 'Acréscimo' : 'Capital'}</span>
                             </div>
-                            <span className={`text-xs font-black shrink-0 ${p.type === 'interest' ? 'text-emerald-400' : 'text-blue-400'}`}>{formatCurrency(p.amount)}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`text-xs font-black ${p.type === 'interest' ? 'text-gold-400' : p.type === 'discount' ? 'text-emerald-400' : 'text-blue-400'}`}>{formatCurrency(p.amount)}</span>
+                              {onDeletePayment && (() => {
+                                const _rLoan = data.loans.find(l => l.id === p.loanId);
+                                if (p.type === 'discount' || p.type === 'surcharge') return null;
+                                if (p.type === 'capital' && _rLoan?.loanType === 'installments') return null;
+                                return confirmDeleteId === p.id ? (
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={async (e) => { e.stopPropagation(); setConfirmDeleteId(null); await onDeletePayment(p.id, p.loanId, p.amount, p.type, p.date); }}
+                                      className="px-2 py-0.5 bg-red-500 text-white rounded text-[9px] font-black"
+                                    >Sim</button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
+                                      className="px-2 py-0.5 bg-white/10 text-white/50 rounded text-[9px] font-black"
+                                    >Não</button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(p.id); }}
+                                    className="text-red-400/40 hover:text-red-400 active:text-red-500 transition-all"
+                                    title="Estornar parcela (capital + juros)"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                );
+                              })()}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -273,16 +305,16 @@ const Reports: React.FC<ReportsProps> = ({ data }) => {
                       </div>
                       <div>
                         <p className="text-[8px] text-white/25 uppercase tracking-widest mb-0.5">Juros Pagos</p>
-                        <p className="text-sm font-black text-emerald-400">{formatCurrency(totalInterestPaid)}</p>
+                        <p className="text-sm font-black text-gold-400">{formatCurrency(totalInterestPaid)}</p>
                       </div>
                       <div>
                         <p className="text-[8px] text-white/25 uppercase tracking-widest mb-0.5">Saldo Dev.</p>
-                        <p className={`text-sm font-black ${activeBalance > 0 ? 'text-emerald-400' : 'text-white/20'}`}>{formatCurrency(activeBalance)}</p>
+                        <p className={`text-sm font-black ${activeBalance > 0 ? 'text-gold-400' : 'text-white/20'}`}>{formatCurrency(activeBalance)}</p>
                       </div>
                     </div>
                     <button
                       onClick={e => { e.stopPropagation(); generatePDF(client); }}
-                      className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase italic transition-all border border-white/10 whitespace-nowrap"
+                      className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-gold-600 text-white rounded-xl text-[10px] font-black uppercase italic transition-all border border-white/10 whitespace-nowrap"
                     >
                       <span></span> PDF
                     </button>

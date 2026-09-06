@@ -157,20 +157,17 @@ export const isDueToday = (dueDateBr: string) => {
 export const isDueTomorrow = (dueDateBr: string) => {
   if (!dueDateBr) return false;
   const isoDue = brToIso(dueDateBr);
-  
-  const tomorrowDate = new Date();
-  // Forçamos o cálculo do "amanhã" também no fuso de SP
-  const spToday = new Date(new Intl.DateTimeFormat('en-US', {timeZone: 'America/Sao_Paulo'}).format(new Date()));
-  spToday.setDate(spToday.getDate() + 1);
-  
+  // Calcula amanha a partir do hoje em SP (evita problemas de fuso)
+  const todayISO = getBrTodayISO();
+  const [y, m, d] = todayISO.split('-').map(Number);
+  const tomorrow = new Date(y, m - 1, d + 1, 12, 0, 0);
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   });
-  const isoTomorrow = formatter.format(spToday);
-  
+  const isoTomorrow = formatter.format(tomorrow);
   return isoDue === isoTomorrow;
 };
 
@@ -201,19 +198,139 @@ export const isLoanPendingForFilter = (loan: Loan, checker: (d: string) => boole
   }
 };
 
+/**
+ * Próxima data (DD-MM-YYYY) que cai no dia-do-mês informado, a partir de hoje.
+ * Se o dia já passou (ou é hoje) neste mês, pula pro mês seguinte.
+ */
+export const proximaDataComDia = (dia: number): string => {
+  const hoje = hojeBR();
+  const [, mm, yyyy] = hoje.split('-');
+  const maxDay = new Date(Number(yyyy), Number(mm), 0).getDate();
+  const clampedDay = Math.min(Math.max(dia, 1), maxDay);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const candidato = `${pad(clampedDay)}-${mm}-${yyyy}`;
+  if (brToIso(candidato) <= getBrTodayISO()) {
+    return addMonthsPreservingDay(candidato, 1);
+  }
+  return candidato;
+};
+
+/**
+ * Data de vencimento da parcela N, dado a 1ª data e a frequência.
+ * Mensal: soma meses preservando o dia. Semanal: soma 7 dias por parcela.
+ */
+export const dataParcela = (primeiraData: string, indiceZeroBased: number, frequencia: 'monthly' | 'weekly'): string => {
+  return frequencia === 'weekly'
+    ? addDays(primeiraData, 7 * indiceZeroBased)
+    : addMonthsPreservingDay(primeiraData, indiceZeroBased);
+};
+
+/**
+ * Juros fixo por parcela: a taxa é sempre mensal. Semanal reparte esse juros
+ * mensal pelas ~4 semanas do mês, mas o valor repete IGUAL em toda parcela
+ * (não divide de novo pelo total de parcelas do contrato).
+ */
+export const jurosFixoPorParcela = (jurosMensal: number, frequencia: 'monthly' | 'weekly'): number => {
+  return frequencia === 'weekly' ? jurosMensal / 4 : jurosMensal;
+};
+
+export interface ParcelaCalculada {
+  number: number;
+  capitalValue: number;
+  interestValue: number;
+  dueDate: string;
+  status: 'pendente';
+}
+
+/**
+ * Distribui o capital total em N parcelas (centavos extras nas primeiras,
+ * pra fechar exato) com o juros fixo repetindo em cada uma.
+ */
+export const distribuirParcelas = (
+  capitalTotal: number,
+  jurosMensal: number,
+  numParcelas: number,
+  primeiraData: string,
+  frequencia: 'monthly' | 'weekly'
+): ParcelaCalculada[] => {
+  const juros = jurosFixoPorParcela(jurosMensal, frequencia);
+  const totalCents = Math.round(capitalTotal * 100);
+  const n = Math.max(1, numParcelas);
+  const basePerInst = Math.floor(totalCents / n);
+  const extraCents = totalCents - basePerInst * n;
+
+  const parcelas: ParcelaCalculada[] = [];
+  for (let i = 1; i <= n; i++) {
+    const instCents = i <= extraCents ? basePerInst + 1 : basePerInst;
+    parcelas.push({
+      number: i,
+      capitalValue: Math.round(instCents) / 100,
+      interestValue: juros,
+      dueDate: dataParcela(primeiraData, i - 1, frequencia),
+      status: 'pendente'
+    });
+  }
+  return parcelas;
+};
+
+/**
+ * Menor número de parcelas cujo valor (capital/n + juros fixo) cabe no limite
+ * que o cliente pode pagar por período.
+ */
+export const calcularNumParcelasPorLimite = (
+  capitalTotal: number,
+  jurosMensal: number,
+  limiteMaximoPorParcela: number,
+  frequencia: 'monthly' | 'weekly'
+): number => {
+  const juros = jurosFixoPorParcela(jurosMensal, frequencia);
+  const capitalMaxPorParcela = limiteMaximoPorParcela - juros;
+  if (capitalMaxPorParcela <= 0) return 0;
+  return Math.max(1, Math.ceil(capitalTotal / capitalMaxPorParcela));
+};
+
 export const addMonthsPreservingDay = (dateStr: string, months: number): string => {
   const iso = brToIso(dateStr);
   if (!iso) return dateStr;
   const [y, m, d] = iso.split('-').map(Number);
-  const targetDate = new Date(y, m - 1 + months, d, 12, 0, 0);
-  if (targetDate.getDate() !== d) {
-    targetDate.setDate(0);
-  }
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  return isoToBr(formatter.format(targetDate));
+  // Aritmetica pura em meses para evitar problemas de DST e fuso
+  const totalMonths = (y * 12 + (m - 1)) + months;
+  const targetYear = Math.floor(totalMonths / 12);
+  const targetMonth = (totalMonths % 12) + 1; // 1-based
+  // Clamp: ultimo dia do mes alvo via dia 0 do proximo mes
+  const maxDay = new Date(targetYear, targetMonth, 0).getDate();
+  const clampedDay = Math.min(d, maxDay);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(clampedDay)}-${pad(targetMonth)}-${targetYear}`;
+};
+
+
+/**
+ * A partir de quantos dias de atraso um contrato vira CRITICO.
+ * Mudar aqui muda a regra em todo o app.
+ */
+export const DIAS_PARA_CRITICO = 5;
+
+/**
+ * Dias de atraso de uma data BR (DD-MM-YYYY) em relacao a hoje em Sao Paulo.
+ * Positivo = vencida ha N dias | 0 = vence hoje | negativo = ainda vai vencer.
+ */
+export const diasDeAtraso = (dueDateBr: string): number | null => {
+  const iso = brToIso(dueDateBr);
+  if (!iso) return null;
+  const d1 = new Date(iso + 'T12:00:00');
+  const d2 = new Date(getBrTodayISO() + 'T12:00:00');
+  return Math.round((d2.getTime() - d1.getTime()) / 86400000);
+};
+
+/** Vencido ha DIAS_PARA_CRITICO dias ou mais. */
+export const isCritico = (dueDateBr: string): boolean => {
+  const d = diasDeAtraso(dueDateBr);
+  return d !== null && d >= DIAS_PARA_CRITICO;
+};
+
+/** Vencido ha 1 ate DIAS_PARA_CRITICO-1 dias. */
+export const isVencidoRecente = (dueDateBr: string): boolean => {
+  const d = diasDeAtraso(dueDateBr);
+  return d !== null && d >= 1 && d < DIAS_PARA_CRITICO;
 };

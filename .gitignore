@@ -6,3 +6,18 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# copias de seguranca e rascunhos que ficam so na VPS
+*.bak
+*.bak-*
+*.swp
+backups_claude/
+
+# dados reais de cliente e scripts avulsos: nunca vao para o repositorio publico
+dados_vencidos.json
+meu_app_financeiro/
+api_boby.py
+boby_supabase.py
+boby_skill.md
+teste.cjs
+get-docker.sh

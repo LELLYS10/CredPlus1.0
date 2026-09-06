@@ -55,13 +55,13 @@ export default function PreRegistrationsList({ onSelect, onClose }: Props) {
             <div
               key={pr.id}
               onClick={() => onSelect(pr)}
-              className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-3 cursor-pointer hover:border-emerald-500/50 transition-all"
+              className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-3 cursor-pointer hover:border-gold-500/50 transition-all"
             >
               <h3 className="font-black text-white">{pr.name}</h3>
-              <p className="text-emerald-400 text-sm font-bold mt-1">{pr.phone}</p>
+              <p className="text-gold-400 text-sm font-bold mt-1">{pr.phone}</p>
               {pr.cpf && <p className="text-white/40 text-xs mt-1">CPF: {pr.cpf}</p>}
               {pr.desired_amount && (
-                <p className="text-emerald-400 text-xs font-bold mt-1">Valor: R$ {pr.desired_amount}</p>
+                <p className="text-gold-400 text-xs font-bold mt-1">Valor: R$ {pr.desired_amount}</p>
               )}
               {pr.referred_by && (
                 <p className="text-white/40 text-xs mt-1 italic">Indicado por: {pr.referred_by}</p>

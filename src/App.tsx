@@ -8,7 +8,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Client, Loan, AppData, Payment, Installment, AppUser, DashboardStats, PreCadastro } from './types';
 import { brToIso, isoToBr, hojeBR, isThisMonth, isOverdue, isDueToday, isDueTomorrow, proximaDataComDia, addMonthsPreservingDay, isCritico, isVencidoRecente, formatCurrency } from './utils';
 import { supabaseService } from './supabaseService';
@@ -27,12 +27,14 @@ import ConfirmModal from './components/ConfirmModal';
 import PaymentModal from './components/PaymentModal';
 import InstallmentPaymentModal from './components/InstallmentPaymentModal';
 import ClientHistoryModal from './components/ClientHistoryModal';
+import LockScreen from './components/LockScreen';
 import EditLoanModal from './components/EditLoanModal';
 import ResetPasswordForm from './components/ResetPasswordForm';
 import PreCadastroPublico from './components/PreCadastroPublico';
 import PreCadastrosQueue from './components/PreCadastrosQueue';
 import AddCapitalModal from './components/AddCapitalModal';
 import { isAdminEmail } from './adminEmails';
+import { assinaturaBloqueada, dataBR, CONTATO_WHATSAPP, CONTATO_EMAIL } from './assinatura';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
@@ -222,26 +224,88 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // ---- Bloqueio por inatividade ----
+  // Nao basta um cronometro: o navegador congela timers com o app em segundo plano.
+  // Por isso guardamos o HORARIO da ultima acao e comparamos com o relogio sempre
+  // que o app volta a aparecer — senao o celular esquecido na mesa nunca bloquearia.
+  const TEMPO_BLOQUEIO = 3 * 60 * 1000;
+  const [bloqueado, setBloqueado] = useState(false);
+  const ultimaAtividadeRef = useRef<number>(Date.now());
+  const bloqueadoRef = useRef(false);
+
+  useEffect(() => { bloqueadoRef.current = bloqueado; }, [bloqueado]);
+
+  const registrarAtividade = useCallback(() => {
+    ultimaAtividadeRef.current = Date.now();
+    try { localStorage.setItem('credplus:ultimaAtividade', String(ultimaAtividadeRef.current)); } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!session) { setBloqueado(false); return; }
+
+    try {
+      const salvo = Number(localStorage.getItem('credplus:ultimaAtividade') || 0);
+      if (salvo && Date.now() - salvo >= TEMPO_BLOQUEIO) setBloqueado(true);
+      else registrarAtividade();
+    } catch { registrarAtividade(); }
+
+    const eventos = ['mousedown', 'keydown', 'touchstart', 'wheel', 'scroll'];
+    const aoUsar = () => { if (!bloqueadoRef.current) registrarAtividade(); };
+    eventos.forEach(ev => window.addEventListener(ev, aoUsar, { passive: true }));
+
+    const conferir = () => {
+      if (!bloqueadoRef.current && Date.now() - ultimaAtividadeRef.current >= TEMPO_BLOQUEIO) setBloqueado(true);
+    };
+    const aoVoltar = () => { if (document.visibilityState === 'visible') conferir(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    const intervalo = window.setInterval(conferir, 15000);
+
+    return () => {
+      eventos.forEach(ev => window.removeEventListener(ev, aoUsar));
+      document.removeEventListener('visibilitychange', aoVoltar);
+      window.clearInterval(intervalo);
+    };
+  }, [session, registrarAtividade]);
+
+  const handleUpdateClientNotes = async (clientId: string, notes: string) => {
+    await supabaseService.updateClientNotes(clientId, notes);
+    setData(prev => ({ ...prev, clients: prev.clients.map(c => c.id === clientId ? { ...c, notes: notes.trim() || undefined } : c) }));
+  };
+
   const handleConfirmPayment = async (pData: { interestValue: number; capitalValue: number; date: string; nextDueDate?: string; newInterestFixedAmount?: number; acrescimo?: number; desconto?: number }) => {
     const loan = data.loans.find(l => l.id === selectedLoanId);
     if (!loan) return;
     try {
-      if (pData.interestValue > 0) {
-        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: pData.interestValue, date: pData.date, type: 'interest' });
+      // O que passar do juro do ciclo nao e juro: e amortizacao. Ex: juro 150, cliente
+      // paga 200 -> 150 fecham o ciclo e 50 abatem o capital. O juro do proximo ciclo
+      // e recalculado sobre o capital que sobrou, mantendo a taxa do contrato.
+      const pendenteAntesDoPagamento = Math.max(0, (loan.interestFixedAmount || 0) - (loan.jurosPagoNoCiclo || 0));
+      const jurosAplicado = Math.min(pData.interestValue, pendenteAntesDoPagamento);
+      const excedente = pData.interestValue - jurosAplicado;
+      const capitalAbatido = (pData.capitalValue || 0) + excedente;
+
+      if (jurosAplicado > 0) {
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: jurosAplicado, date: pData.date, type: 'interest' });
       }
-      if (pData.capitalValue > 0) {
-        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: pData.capitalValue, date: pData.date, type: 'capital' });
+      if (capitalAbatido > 0) {
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: capitalAbatido, date: pData.date, type: 'capital' });
       }
       // O desconto perdoa primeiro o juro pendente; so o excedente abate o saldo
-      const jurosRecebido = (loan.jurosPagoNoCiclo || 0) + pData.interestValue;
+      const jurosRecebido = (loan.jurosPagoNoCiclo || 0) + jurosAplicado;
       const pendenteJuros = Math.max(0, (loan.interestFixedAmount || 0) - jurosRecebido);
       const descontoNoJuros = Math.min(pData.desconto || 0, pendenteJuros);
       const descontoNoCapital = (pData.desconto || 0) - descontoNoJuros;
-      const novoCapital = Math.max(0, loan.amount - (pData.capitalValue||0) - descontoNoCapital + (pData.acrescimo||0));
+      const novoCapital = Math.max(0, loan.amount - capitalAbatido - descontoNoCapital + (pData.acrescimo||0));
       const novoStatus = novoCapital <= 0 ? 'paid' : 'active';
       const updates: any = { jurosPagoNoCiclo: pData.nextDueDate ? 0 : jurosRecebido + descontoNoJuros, amount: novoCapital, status: novoStatus };
       if (pData.nextDueDate) updates.dueDate = pData.nextDueDate;
-      if (pData.newInterestFixedAmount !== undefined) updates.interestFixedAmount = pData.newInterestFixedAmount;
+      if (pData.newInterestFixedAmount !== undefined) {
+        updates.interestFixedAmount = pData.newInterestFixedAmount;
+      } else if (novoCapital !== loan.amount) {
+        // Capital mudou sem o operador digitar um juro novo: mantem a taxa do contrato.
+        const taxa = loan.amount > 0 ? (loan.interestFixedAmount || 0) / loan.amount : 0;
+        updates.interestFixedAmount = Math.round(novoCapital * taxa * 100) / 100;
+      }
       await supabaseService.updateLoan(loan.id, updates);
       setData(prev=>({...prev,loans:prev.loans.map(l=>l.id===loan.id?{...l,amount:novoCapital,status:novoStatus,statusBucket:novoStatus==='paid'?'paid':l.statusBucket,dueDate:pData.nextDueDate||l.dueDate}:l)}));
       // Se o juro do ciclo nao foi quitado por inteiro, avisa quanto ainda falta
@@ -259,25 +323,40 @@ const App: React.FC = () => {
     }
   };
 
-  const handleConfirmInstallment = async (capital: number, interest: number, date: string) => {
+  const handleConfirmInstallment = async (capital: number, interest: number, date: string, acrescimo: number = 0, desconto: number = 0) => {
     const loan = data.loans.find(l => l.id === selectedLoanId);
     if (!loan || !selectedInstallmentId) return;
     try {
-      if (interest > 0) {
-        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: interest, date: date, type: 'interest' });
+      // Desconto perdoa parte do juro cobrado nesta parcela (nunca mais que o proprio juro).
+      // Acrescimo e valor cobrado a mais nesta transacao. Os dois viram linha propria no
+      // extrato pra que o estorno consiga desfazer tudo exatamente.
+      const descontoNoJuros = Math.min(desconto, interest);
+      const netInterest = interest - descontoNoJuros;
+
+      if (netInterest > 0) {
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: netInterest, date: date, type: 'interest' });
+      }
+      if (descontoNoJuros > 0) {
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: -descontoNoJuros, date: date, type: 'discount' });
+      }
+      if (acrescimo > 0) {
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: acrescimo, date: date, type: 'surcharge' });
       }
       if (capital > 0) {
         await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: capital, date: date, type: 'capital' });
       }
       await supabaseService.updateInstallment(selectedInstallmentId, { status: 'pago', paidAt: date });
-      
+
       const updatedInstallments = await supabaseService.getInstallments(session.user.id);
       const loanInsts = updatedInstallments.filter(i => i.loanId === loan.id);
       const pendentes = loanInsts.filter(i => i.status === 'pendente');
-      
+
+      // O saldo do contrato tem que acompanhar as parcelas pagas, senao ele fica
+      // congelado no valor original e contamina amortizacao, + capital e o painel.
+      const saldoAberto = pendentes.reduce((acc, i) => acc + i.capitalValue, 0);
       const loanFS = pendentes.length === 0 ? 'paid' : 'active';
-      if (pendentes.length === 0) await supabaseService.updateLoan(loan.id, { status: 'paid' });
-      else { const ni=pendentes.sort((a,b)=>brToIso(a.dueDate).localeCompare(brToIso(b.dueDate)))[0]; if(ni)await supabaseService.updateLoan(loan.id,{dueDate:ni.dueDate}); }
+      if (pendentes.length === 0) await supabaseService.updateLoan(loan.id, { status: 'paid', amount: 0 });
+      else { const ni=pendentes.sort((a,b)=>brToIso(a.dueDate).localeCompare(brToIso(b.dueDate)))[0]; if(ni)await supabaseService.updateLoan(loan.id,{dueDate:ni.dueDate, amount: saldoAberto}); }
       setData(prev=>({...prev,loans:prev.loans.map(l=>l.id===loan.id?{...l,status:loanFS,statusBucket:loanFS==='paid'?'paid':l.statusBucket}:l)}));
       setSelectedInstallmentId(null); setSelectedLoanId(null); await refreshAppData();
     } catch (err) {
@@ -330,12 +409,26 @@ const App: React.FC = () => {
     }
   };
 
-  const handlePayInterestOnly = async (interest: number, date: string) => {
+  const handlePayInterestOnly = async (interest: number, date: string, acrescimo: number = 0, desconto: number = 0) => {
     const loan = data.loans.find(l => l.id === selectedLoanId);
     if (!loan || !selectedInstallmentId) return;
     try {
-      await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: interest, date: date, type: 'interest' });
-      
+      // Desconto perdoa parte do juro cobrado nesta parcela (nunca mais que o proprio juro).
+      // Acrescimo e valor cobrado a mais nesta transacao. Os dois viram linha propria no
+      // extrato pra que o estorno consiga desfazer tudo exatamente.
+      const descontoNoJuros = Math.min(desconto, interest);
+      const netInterest = interest - descontoNoJuros;
+
+      if (netInterest > 0) {
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: netInterest, date: date, type: 'interest' });
+      }
+      if (descontoNoJuros > 0) {
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: -descontoNoJuros, date: date, type: 'discount' });
+      }
+      if (acrescimo > 0) {
+        await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: acrescimo, date: date, type: 'surcharge' });
+      }
+
       const installments = await supabaseService.getInstallments(session.user.id);
       const loanInsts = installments.filter(i => i.loanId === loan.id);
       const currentInst = loanInsts.find(i => i.id === selectedInstallmentId);
@@ -350,10 +443,9 @@ const App: React.FC = () => {
       const empurrar = (data: string) => loan.installmentFrequency === 'weekly' ? addDays(data, 7) : addMonthsPreservingDay(data, 1);
 
       for (const inst of toUpdate) {
-        const newDate = empurrar(inst.dueDate);
-        await supabaseService.updateInstallment(inst.id, { dueDate: newDate });
+        await supabaseService.updateInstallment(inst.id, { dueDate: empurrar(inst.dueDate) });
       }
-      
+
       setSelectedInstallmentId(null); setSelectedLoanId(null); await refreshAppData();
     } catch (err) {
       console.error('App.tsx: Error in handlePayInterestOnly:', err);
@@ -366,8 +458,13 @@ const App: React.FC = () => {
     if (!loan) return;
     try {
       await supabaseService.savePayment({ userId: session.user.id, loanId: loan.id, clientId: loan.clientId, amount: amount, date: date, type: 'capital' });
-      
-      const novoCapital = loan.amount - amount;
+
+      // No parcelado o loan.amount nao acompanha as parcelas ja pagas; a base real
+      // do que ainda falta e a soma do capital das parcelas pendentes.
+      const capitalBase = (loan.loanType === 'installments' && loan.installments && loan.installments.length > 0)
+        ? loan.installments.filter(i => i.status === 'pendente').reduce((acc, i) => acc + i.capitalValue, 0)
+        : loan.amount;
+      const novoCapital = capitalBase - amount;
       
       if (novoCapital <= 0) {
         await supabaseService.updateLoan(loan.id, { amount: 0, status: 'paid' });
@@ -404,38 +501,74 @@ const App: React.FC = () => {
     }
   };
 
-  const handleConfirmAddCapital = async (amount: number, date: string) => {
+  const handleConfirmAddCapital = async (amount: number, date: string, modo: 'mesmas' | 'mais' = 'mesmas') => {
     const loan = data.loans.find(l => l.id === addCapitalLoanId);
     if (!loan) return;
     try {
-      const novoCapital = loan.amount + amount;
       const novoOriginal = (loan.originalAmount || loan.amount) + amount;
+      // A taxa do contrato vem da razao juros/capital do cadastro — o campo
+      // interestRate esta gravado de formas diferentes pelo app e nao e confiavel.
+      const taxaMensal = (loan.originalAmount || loan.amount) > 0
+        ? (loan.interestFixedAmount || 0) / (loan.originalAmount || loan.amount)
+        : 0;
 
       if (loan.loanType === 'recurrent') {
-        const taxa = loan.interestRate || 0;
-        const novoJuros = novoCapital * (taxa / 100);
-        await supabaseService.updateLoan(loan.id, { amount: novoCapital, originalAmount: novoOriginal, interestFixedAmount: novoJuros });
+        const novoCapital = loan.amount + amount;
+        await supabaseService.updateLoan(loan.id, {
+          amount: novoCapital,
+          originalAmount: novoOriginal,
+          interestFixedAmount: Math.round(novoCapital * taxaMensal * 100) / 100
+        });
       } else {
-        const { jurosFixoPorParcela } = await import('./utils');
+        const { jurosFixoPorParcela, addMonthsPreservingDay, addDays } = await import('./utils');
         const installments = await supabaseService.getInstallments(session.user.id);
-        const pendingInsts = installments.filter(i => i.loanId === loan.id && i.status === 'pendente');
-        const numRestantes = pendingInsts.length;
+        const pendentes = installments
+          .filter(i => i.loanId === loan.id && i.status === 'pendente')
+          .sort((a, b) => brToIso(a.dueDate).localeCompare(brToIso(b.dueDate)));
 
-        if (numRestantes > 0) {
-          const taxaOriginal = loan.interestFixedAmount / (loan.originalAmount || loan.amount);
-          const jurosMensalNovo = novoOriginal * taxaOriginal;
-          const jurosPorParcela = jurosFixoPorParcela(jurosMensalNovo, loan.installmentFrequency === 'weekly' ? 'weekly' : 'monthly');
-          const novoValorCapitalPorParcela = novoCapital / numRestantes;
+        // Base real do que ele ainda deve: o capital das parcelas pendentes.
+        // Usar loan.amount aqui cobraria de novo o capital ja devolvido.
+        const capitalPendente = pendentes.reduce((acc, i) => acc + i.capitalValue, 0);
+        const novoCapital = capitalPendente + amount;
+        const semanal = loan.installmentFrequency === 'weekly';
+        const jurosPorParcela = jurosFixoPorParcela(novoCapital * taxaMensal, semanal ? 'weekly' : 'monthly');
 
-          for (const inst of pendingInsts) {
-            await supabaseService.updateInstallment(inst.id, {
-              capitalValue: novoValorCapitalPorParcela,
-              interestValue: jurosPorParcela
+        if (pendentes.length > 0) {
+          const capitalPorParcelaAtual = capitalPendente / pendentes.length;
+          const quantidade = modo === 'mais' && capitalPorParcelaAtual > 0
+            ? Math.max(pendentes.length, Math.round(novoCapital / capitalPorParcelaAtual))
+            : pendentes.length;
+
+          const proximaData = (base: string) => semanal ? addDays(base, 7) : addMonthsPreservingDay(base, 1);
+          const capitalPorParcela = novoCapital / quantidade;
+          const primeiroNumero = pendentes[0].number;
+
+          const novasParcelas: { number: number; capitalValue: number; interestValue: number; dueDate: string }[] = [];
+          let ultimaData = pendentes[pendentes.length - 1].dueDate;
+          for (let i = 0; i < quantidade; i++) {
+            let vencimento: string;
+            if (i < pendentes.length) {
+              vencimento = pendentes[i].dueDate;
+            } else {
+              ultimaData = proximaData(ultimaData);
+              vencimento = ultimaData;
+            }
+            novasParcelas.push({
+              number: primeiroNumero + i,
+              capitalValue: capitalPorParcela,
+              interestValue: jurosPorParcela,
+              dueDate: vencimento
             });
           }
+
+          await supabaseService.substituirParcelasPendentes(loan.id, session.user.id, loan.clientId, novasParcelas);
         }
 
-        await supabaseService.updateLoan(loan.id, { amount: novoCapital, originalAmount: novoOriginal });
+        await supabaseService.updateLoan(loan.id, {
+          amount: novoCapital,
+          originalAmount: novoOriginal,
+          interestFixedAmount: Math.round(novoOriginal * taxaMensal * 100) / 100
+        });
       }
 
       setAddCapitalLoanId(null); await refreshAppData();
@@ -452,54 +585,73 @@ const App: React.FC = () => {
       if (!loan) { await refreshAppData(); return; }
 
       if (loan.loanType === 'installments') {
-        const { addMonthsPreservingDay: _ampEst } = await import('./utils');
-        const paidInsts = (loan.installments || []).filter(i => i.status === 'pago');
-        if (paidInsts.length === 0) {
-          // Interest-only payment (handlePayInterestOnly): no installment marked pago
-          // Reverse the +1 month shift on all pending installments
+        const { addMonthsPreservingDay: _ampEst, addDays: _addDaysEst } = await import('./utils');
+        // Desfaz o empurrao da data com a MESMA unidade que o pagamento usou
+        // (semanal empurra 7 dias, mensal empurra 1 mes).
+        const desempurrar = (d: string) => loan.installmentFrequency === 'weekly' ? _addDaysEst(d, -7) : _ampEst(d, -1);
+        const mesmaData = (a?: string | null, b?: string) => !!a && !!b && brToIso(a) === brToIso(b);
+
+        // Toda linha lancada na mesma transacao (juros, capital, desconto, acrescimo)
+        // some junto: estorno tem que voltar a divida exatamente como estava.
+        if (paymentDate) {
+          const siblings = data.payments.filter(p => p.loanId === loanId && mesmaData(p.date, paymentDate) && p.id !== paymentId);
+          for (const sib of siblings) {
+            await supabaseService.deletePayment(sib.id);
+          }
+        }
+
+        // A parcela so foi marcada 'pago' no recebimento total; no "so juros" ela continua
+        // pendente e a unica coisa que mudou foi a data. Por isso a deteccao e pelo paidAt.
+        const targetInst = (loan.installments || []).find(i => i.status === 'pago' && mesmaData(i.paidAt, paymentDate));
+
+        if (targetInst) {
+          await supabaseService.updateInstallment(targetInst.id, { status: 'pendente', paidAt: null });
+          const pendingInsts = (loan.installments || [])
+            .filter(i => i.status === 'pendente' || i.id === targetInst.id)
+            .sort((a, b) => brToIso(a.dueDate).localeCompare(brToIso(b.dueDate)));
+          if (pendingInsts.length > 0) {
+            // A parcela voltou a dever: o saldo do contrato volta junto.
+            const saldoRestaurado = pendingInsts.reduce((acc, i) => acc + i.capitalValue, 0);
+            await supabaseService.updateLoan(loanId, { status: 'active', dueDate: pendingInsts[0].dueDate, amount: saldoRestaurado });
+          }
+        } else {
           const pendentes = (loan.installments || []).filter(i => i.status === 'pendente');
           for (const inst of pendentes) {
-            await supabaseService.updateInstallment(inst.id, { dueDate: _ampEst(inst.dueDate, -1) });
+            await supabaseService.updateInstallment(inst.id, { dueDate: desempurrar(inst.dueDate) });
           }
           if (pendentes.length > 0) {
             const sorted = [...pendentes].sort((a, b) => brToIso(a.dueDate).localeCompare(brToIso(b.dueDate)));
-            await supabaseService.updateLoan(loanId, { status: 'active', dueDate: _ampEst(sorted[0].dueDate, -1) });
-          }
-        } else {
-          // Full installment payment: capital+interest are atomic — delete sibling payment too
-          if (paymentDate) {
-            const siblings = data.payments.filter(p => p.loanId === loanId && p.date === paymentDate && p.id !== paymentId);
-            for (const sib of siblings) {
-              await supabaseService.deletePayment(sib.id);
-            }
-          }
-          // Revert the installment: match by paidAt date or by amount
-          let targetInst: any = null;
-          const byDate = paidInsts.filter(i => i.paidAt === paymentDate || i.paidAt === paymentDate.replace(/\//g, '-'));
-          if (byDate.length > 0) {
-            targetInst = byDate[byDate.length - 1];
-          } else {
-            const matching = paidInsts.filter(i => Math.abs(i.capitalValue - amount) < 0.01 || Math.abs(i.interestValue - amount) < 0.01);
-            targetInst = matching.sort((a: any, b: any) => (b.paidAt || '').localeCompare(a.paidAt || ''))[0]
-              || paidInsts[paidInsts.length - 1];
-          }
-          if (targetInst) {
-            await supabaseService.updateInstallment(targetInst.id, { status: 'pendente', paidAt: null });
-          }
-          const pendingInsts = (loan.installments || [])
-            .filter(i => i.status === 'pendente' || (targetInst && i.id === targetInst.id))
-            .sort((a, b) => brToIso(a.dueDate).localeCompare(brToIso(b.dueDate)));
-          if (pendingInsts.length > 0) {
-            await supabaseService.updateLoan(loanId, { status: 'active', dueDate: pendingInsts[0].dueDate });
+            await supabaseService.updateLoan(loanId, { status: 'active', dueDate: desempurrar(sorted[0].dueDate) });
           }
         }
       } else {
-        // Recurrent loan
-        if (type === 'interest') {
-          await supabaseService.updateLoan(loanId, { jurosPagoNoCiclo: Math.max(0, (loan.jurosPagoNoCiclo || 0) - amount) });
-        } else if (type === 'capital') {
-          await supabaseService.updateLoan(loanId, { amount: loan.amount + amount, status: 'active' });
+        // Recorrente: um recebimento pode ter juros e capital na mesma data e o extrato
+        // mostra os dois num card so. O estorno desfaz as duas pontas e apaga as irmas.
+        const mesmaDataRec = (a?: string | null, b?: string) => !!a && !!b && brToIso(a) === brToIso(b);
+        const irmas = paymentDate
+          ? data.payments.filter(p => p.loanId === loanId && mesmaDataRec(p.date, paymentDate) && p.id !== paymentId)
+          : [];
+        const linhas = [{ type, amount }, ...irmas.map(p => ({ type: p.type as string, amount: p.amount }))];
+
+        let jurosNoCiclo = loan.jurosPagoNoCiclo || 0;
+        let saldo = loan.amount;
+        for (const linha of linhas) {
+          if (linha.type === 'interest') jurosNoCiclo = Math.max(0, jurosNoCiclo - linha.amount);
+          else if (linha.type === 'capital') saldo = saldo + linha.amount;
         }
+
+        for (const irma of irmas) {
+          await supabaseService.deletePayment(irma.id);
+        }
+
+        // Se o capital volta, o juro mensal tambem tem que voltar: mesma taxa,
+        // recalculada sobre o saldo restaurado.
+        const restaurar: any = { jurosPagoNoCiclo: jurosNoCiclo, amount: saldo, status: 'active' };
+        if (saldo !== loan.amount && loan.amount > 0) {
+          const taxa = (loan.interestFixedAmount || 0) / loan.amount;
+          restaurar.interestFixedAmount = Math.round(saldo * taxa * 100) / 100;
+        }
+        await supabaseService.updateLoan(loanId, restaurar);
       }
       await refreshAppData();
     } catch (err) {
@@ -716,6 +868,45 @@ const App: React.FC = () => {
     return <Auth onSession={(s, p) => { setSession(s); setUserProfile(p); refreshAppData(); }} />;
   }
 
+  // Assinatura vencida alem da carencia: corta o acesso mesmo com status ativo.
+  // Quem nao tem vencimento definido nunca cai aqui. Admin nunca e cortado.
+  if (!isAdminEmail(session.user?.email) && assinaturaBloqueada(userProfile?.expiresAt)) {
+    return (
+      <div className="min-h-screen bg-[#0a1629] flex items-center justify-center p-4">
+        <div className="glass p-10 rounded-[40px] text-center max-w-md border border-red-500/20 shadow-2xl">
+          <div className="text-4xl mb-6">🔒</div>
+          <h1 className="text-3xl font-black italic text-white mb-4">ASSINATURA VENCIDA</h1>
+          <p className="text-sm text-white/60 mb-6 font-bold italic">
+            Seu acesso foi suspenso porque a mensalidade venceu em {dataBR(userProfile?.expiresAt)}. Regularize para voltar a usar o sistema.
+          </p>
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-8 space-y-3">
+            <p className="text-[9px] font-black text-white/30 uppercase tracking-[0.3em] italic">Fale com a CredPlus</p>
+            <a
+              href={`https://wa.me/55${CONTATO_WHATSAPP.replace(/\D/g, '')}`}
+              target="_blank"
+              rel="noreferrer"
+              className="block py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black uppercase italic transition-all"
+            >
+              📱 {CONTATO_WHATSAPP}
+            </a>
+            <a
+              href={`mailto:${CONTATO_EMAIL}`}
+              className="block py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-2xl text-xs font-black uppercase italic transition-all"
+            >
+              ✉️ {CONTATO_EMAIL}
+            </a>
+          </div>
+          <button
+            onClick={async () => { await supabase.auth.signOut(); setSession(null); }}
+            className="w-full py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-[10px] font-black uppercase italic transition-all border border-white/5"
+          >
+            Sair da Conta
+          </button>
+        </div>
+      </div>
+    );
+  }
+
     if (!isApproved()) {
       const status = userProfile?.status?.toLowerCase();
       let title = "ACESSO PENDENTE";
@@ -750,7 +941,14 @@ const App: React.FC = () => {
 
   return (
     <div className="flex min-h-screen bg-[#0a1629] text-white">
-      <Sidebar 
+      {bloqueado && (
+        <LockScreen
+          email={session.user?.email || ''}
+          onUnlock={() => { registrarAtividade(); setBloqueado(false); }}
+          onSignOut={() => { setBloqueado(false); setSession(null); }}
+        />
+      )}
+      <Sidebar
         currentView={view} setView={setView} isAdmin={isMaster()} 
         profileImage={data.profileImage}
         onUpdateProfileImage={async (base64) => { 
@@ -780,6 +978,7 @@ const App: React.FC = () => {
             onEditLoan={(lid) => setEditLoanId(lid)}
             onDeleteClient={(cid) => { setClientToDelete(cid); setDeleteConfirmOpen(true); }}
             onDeletePayment={handleDeletePayment}
+            onUpdateClientNotes={handleUpdateClientNotes}
             focusClientId={focusedClientId}
             onShowHistory={(cid) => setHistoryClientId(cid)}
             onUpdateInstallmentDate={async (iid, d) => {
@@ -860,6 +1059,7 @@ const App: React.FC = () => {
             theme="emerald" loan={_pmLoan}
             client={_pmClient}
             onCancel={() => setSelectedLoanId(null)} onConfirm={handleConfirmPayment}
+            onUpdateClientNotes={handleUpdateClientNotes}
           />
         ) : null;
       })()}
@@ -876,6 +1076,7 @@ const App: React.FC = () => {
             onConfirm={handleConfirmInstallment}
             onPayInterestOnly={handlePayInterestOnly}
             onLiquidateEarly={handleLiquidateEarly}
+            onUpdateClientNotes={handleUpdateClientNotes}
           />
         ) : null;
       })()}

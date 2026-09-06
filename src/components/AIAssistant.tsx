@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppData } from '../types';
-import { GoogleGenAI, Type } from "@google/genai";
+// @google/genai removido — usando fetch direto para API REST do Gemini
 import { MessageSquare, Send, Bot, User, X, Trash2, Mic, MicOff, Volume2 } from 'lucide-react';
 
 // Add SpeechRecognition types for TypeScript
@@ -107,157 +107,174 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ data, onAddClient, onAddLoan 
     setLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY });
-      
-      const systemInstruction = `
-        Seu nome é Cred. Você é o assistente pessoal e parceiro de negócios do administrador no sistema CREDPLUS.
-        Sua missão é ser um braço direito: alguém que entende de crédito, mas que fala como uma pessoa real, não como um relatório ambulante.
+      const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+      const apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + apiKey;
 
-        DIRETRIZES DE PERSONALIDADE:
-        1. BREVIDADE É TUDO: Se o usuário disser apenas "Oi" ou "Olá", responda de forma curta e amigável.
-        2. CONVERSA NATURAL: Use um tom informal e profissional.
-        3. FOCO NO QUE IMPORTA: Só mencione dados se o usuário perguntar ou se houver algo REALMENTE crítico.
-        4. NÃO SEJA UM ROBÔ: Não repita estatísticas que o usuário já está vendo na tela principal.
-        5. MEMÓRIA DE PREFERÊNCIAS: Memorize e siga fielmente qualquer modelo de cadastro, lista de formulário ou regra que o usuário definir durante a conversa. Se ele disser "quero o cadastro assim", use esse padrão sempre que ele pedir um novo cadastro.
-        6. CAMPOS DE CADASTRO: Você deve conhecer todos os campos disponíveis para o cadastro de clientes:
-           - NOME (Obrigatório)
-           - WHATSAPP/FONE (Obrigatório)
-           - CPF (Opcional)
-           - ENDEREÇO (Opcional)
-           - INDICADO POR (Opcional)
-           - OBSERVAÇÕES/NOTAS (Opcional)
-        7. REGRA DE OURO: Você NUNCA, sob hipótese alguma, deve inventar dados ou usar placeholders para cadastrar um cliente. Se o usuário disser "cadastre um cliente" ou "novo cliente", sua ÚNICA resposta deve ser pedir o Nome e o WhatsApp dele.
-        8. FLUXO DE CADASTRO: 
-           - Passo 1: Usuário pede cadastro.
-           - Passo 2: Você pede os dados (Nome e WhatsApp).
-           - Passo 3: Usuário fornece os dados.
-           - Passo 4: Você confirma os dados recebidos.
-           - Passo 5: Você executa a ferramenta 'register_client'.
-        9. PROIBIÇÃO: É estritamente proibido chamar 'register_client' com nomes genéricos como "Novo Cliente", "Cliente", ou telefones fictícios.
+      const getClientName = (id: string) => data.clients.find(c => c.id === id)?.name || 'Desconhecido';
+      const activeLoans = data.loans.filter(l => l.status !== 'paid');
+      const criticalLoans = activeLoans.filter(l => l.statusBucket === 'critical');
+      const overdueLoans = activeLoans.filter(l => l.statusBucket === 'overdue');
+      const todayLoans = activeLoans.filter(l => l.statusBucket === 'today');
+      const tomorrowLoans = activeLoans.filter(l => l.statusBucket === 'tomorrow');
+      const interestPayments = (data.payments || []).filter((p: any) => p.type === 'interest');
+      const totalJuros = interestPayments.reduce((acc: number, p: any) => acc + Number(p.amount), 0);
+      const totalCapital = (data.payments || []).filter((p: any) => p.type === 'capital').reduce((acc: number, p: any) => acc + Number(p.amount), 0);
 
-        DADOS DO SISTEMA (Use apenas se necessário):
-        - Clientes: ${data.clients.length} (${data.stats?.activeClientsCount || 0} ativos)
-        - Empréstimos: ${data.loans.filter(l => l.status !== 'paid').length} ativos
-        - Capital: R$ ${data.stats?.totalActiveCapital || 0}
-        - Atrasos: ${data.stats?.overdueCount || 0}
-        - Hoje: ${data.stats?.dueTodayCount || 0} vencimentos
+      const lastJuros = interestPayments.slice(-10).map((p: any) => {
+        const loan = data.loans.find((l: any) => l.id === p.loanId) as any;
+        return '- ' + getClientName(loan?.clientId || '') + ' | R$ ' + Number(p.amount).toFixed(2) + ' | ' + (p.date || '');
+      });
 
-        LISTA DE CLIENTES DISPONÍVEIS (Para empréstimos):
-        ${data.clients.map(c => `- ${c.name} (ID: ${c.id})`).join('\n')}
+      const systemText = [
+        'Voce e Cred, assistente pessoal do administrador na P&R Solucoes Financeiras. Seja direto, informal e util.',
+        'REGRAS: Nunca mostre IDs/UUIDs. Use sempre NOMES. Para cadastrar cliente pergunte nome e whatsapp.',
+        '',
+        'DADOS: Clientes=' + data.clients.length + ' | Ativos=' + activeLoans.length,
+        'Capital ativo=R$' + (data.stats?.totalActiveCapital || 0),
+        'Juros recebidos=R$' + totalJuros.toFixed(2) + ' | Capital recuperado=R$' + totalCapital.toFixed(2),
+        'Criticos (5+ dias de atraso): ' + (criticalLoans.map(l => getClientName(l.clientId)).join(', ') || 'nenhum'),
+        'Em atraso (1 a 4 dias): ' + (overdueLoans.map(l => getClientName(l.clientId)).join(', ') || 'nenhum'),
+        'Vencem hoje: ' + (todayLoans.map(l => getClientName(l.clientId)).join(', ') || 'nenhum'),
+        'Vencem amanha: ' + (tomorrowLoans.map(l => getClientName(l.clientId)).join(', ') || 'nenhum'),
+        '',
+        'ULTIMOS JUROS:',
+        ...lastJuros,
+        '',
+        'CLIENTES: ' + data.clients.map(c => c.name).join(', '),
+        'IDs INTERNOS (NUNCA MOSTRAR): ' + data.clients.map(c => c.name + '=' + c.id).join(' | '),
+      ].join('\n');
 
-        AÇÕES DISPONÍVEIS:
-        - Você pode cadastrar novos clientes usando a ferramenta 'register_client'.
-        - Você pode cadastrar novos empréstimos usando a ferramenta 'register_loan'.
-        - Para cadastrar um empréstimo, você PRECISA do ID do cliente. Se o usuário falar o nome, procure na lista acima.
-      `;
-
-      const chatHistory = messages.map(m => ({
+      // Build history: skip leading model messages (Gemini requires user first)
+      const rawHistory = messages.map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }]
       }));
+      let si = 0;
+      while (si < rawHistory.length && rawHistory[si].role === 'model') si++;
+      const contents = [
+        ...rawHistory.slice(si),
+        { role: 'user', parts: [{ text: userMessage }] }
+      ];
 
-      const tools = [
-        {
-          functionDeclarations: [
+      const requestBody = {
+        system_instruction: { parts: [{ text: systemText }] },
+        contents,
+        tools: [{
+          function_declarations: [
             {
-              name: "register_client",
-              description: "ATENÇÃO: Use esta função APENAS se o usuário já tiver fornecido o NOME e o WHATSAPP reais nesta conversa. NUNCA use para cadastrar dados fictícios ou vazios.",
+              name: 'register_client',
+              description: 'Cadastra novo cliente. Use APENAS com nome e whatsapp reais.',
               parameters: {
-                type: Type.OBJECT,
+                type: 'OBJECT',
                 properties: {
-                  name: { type: Type.STRING, description: "Nome completo do cliente (OBRIGATÓRIO)" },
-                  cpf: { type: Type.STRING, description: "CPF do cliente (apenas números ou formatado)" },
-                  phone: { type: Type.STRING, description: "Telefone de contato/Whatsapp (OBRIGATÓRIO)" },
-                  address: { type: Type.STRING, description: "Endereço completo" },
-                  referredBy: { type: Type.STRING, description: "Quem indicou o cliente" },
-                  notes: { type: Type.STRING, description: "Observações adicionais" }
+                  name: { type: 'STRING', description: 'Nome completo (obrigatorio)' },
+                  phone: { type: 'STRING', description: 'WhatsApp (obrigatorio)' },
+                  cpf: { type: 'STRING', description: 'CPF' },
+                  address: { type: 'STRING', description: 'Endereco' },
+                  referredBy: { type: 'STRING', description: 'Indicado por' },
+                  notes: { type: 'STRING', description: 'Observacoes' }
                 },
-                required: ["name", "phone"]
+                required: ['name', 'phone']
               }
             },
             {
-              name: "register_loan",
-              description: "Cadastra um novo empréstimo para um cliente existente",
+              name: 'register_loan',
+              description: 'Cadastra emprestimo para cliente existente.',
               parameters: {
-                type: Type.OBJECT,
+                type: 'OBJECT',
                 properties: {
-                  clientId: { type: Type.STRING, description: "ID do cliente (obtenha da lista de clientes)" },
-                  amount: { type: Type.NUMBER, description: "Valor do capital emprestado" },
-                  interestFixedAmount: { type: Type.NUMBER, description: "Valor fixo do juros (ex: 100 para um empréstimo de 1000 com 10% de juros fixo)" },
-                  loanType: { type: Type.STRING, enum: ["recurrent", "installments"], description: "Tipo de empréstimo: recorrente (apenas juros) ou parcelado" },
-                  loanDate: { type: Type.STRING, description: "Data do empréstimo (DD/MM/AAAA)" },
-                  dueDate: { type: Type.STRING, description: "Data do primeiro vencimento (DD/MM/AAAA)" },
-                  installmentsCount: { type: Type.NUMBER, description: "Número de parcelas (apenas para tipo parcelado)" }
+                  clientName: { type: 'STRING', description: 'Nome do cliente' },
+                  amount: { type: 'NUMBER', description: 'Capital emprestado' },
+                  interestFixedAmount: { type: 'NUMBER', description: 'Juros fixo por ciclo' },
+                  loanType: { type: 'STRING', description: 'recurrent ou installments' },
+                  loanDate: { type: 'STRING', description: 'Data emprestimo DD/MM/AAAA' },
+                  dueDate: { type: 'STRING', description: 'Primeiro vencimento DD/MM/AAAA' },
+                  installmentsCount: { type: 'NUMBER', description: 'Parcelas (so parcelado)' }
                 },
-                required: ["clientId", "amount", "interestFixedAmount", "loanType", "loanDate", "dueDate"]
+                required: ['clientName', 'amount', 'interestFixedAmount', 'loanType', 'loanDate', 'dueDate']
               }
             }
           ]
-        }
-      ];
+        }],
+        generationConfig: { temperature: 0.7 }
+      };
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [
-          ...chatHistory,
-          { role: 'user', parts: [{ text: userMessage }] }
-        ],
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-          tools
-        }
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
       });
 
-      const functionCalls = response.functionCalls;
-      if (functionCalls) {
-        console.log('AI requested function calls:', functionCalls);
-        for (const call of functionCalls) {
-          if (call.name === 'register_client') {
-            try {
-              console.log('Registering client via AI:', call.args);
-              await onAddClient(call.args);
-              setMessages(prev => [...prev, { role: 'assistant', content: `Pronto! Já cadastrei o cliente ${call.args.name} para você. Pode conferir na lista de clientes.` }]);
-            } catch (err) {
-              console.error('Error in register_client tool:', err);
-              setMessages(prev => [...prev, { role: 'assistant', content: `Tive um probleminha ao tentar cadastrar o cliente: ${(err as any).message}` }]);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error('API ' + res.status + ': ' + (errJson?.error?.message || res.statusText));
+      }
+
+      const resData = await res.json();
+      const parts = resData?.candidates?.[0]?.content?.parts || [];
+      const funcPart = parts.find((p: any) => p.functionCall);
+      const textPart = parts.filter((p: any) => p.text).map((p: any) => p.text).join('');
+
+      if (funcPart) {
+        const call = funcPart.functionCall;
+        if (call.name === 'register_client') {
+          try {
+            await onAddClient(call.args);
+            setMessages(prev => [...prev, { role: 'assistant', content: 'Pronto! Cadastrei ' + call.args.name + '. Pode conferir na lista.' }]);
+          } catch (err: any) {
+            setMessages(prev => [...prev, { role: 'assistant', content: 'Problema ao cadastrar: ' + err.message }]);
+          }
+        } else if (call.name === 'register_loan') {
+          try {
+            const clientName = call.args.clientName as string;
+            const client = data.clients.find(c =>
+              c.name.toLowerCase().includes(clientName.toLowerCase()) ||
+              clientName.toLowerCase().includes(c.name.toLowerCase())
+            );
+            if (!client) {
+              setMessages(prev => [...prev, { role: 'assistant', content: 'Nao encontrei o cliente "' + clientName + '". Verifique o nome.' }]);
+            } else {
+              const loanArgs = { ...call.args, clientId: client.id };
+              delete loanArgs.clientName;
+              await onAddLoan(loanArgs);
+              setMessages(prev => [...prev, { role: 'assistant', content: 'Emprestimo de R$ ' + call.args.amount + ' cadastrado para ' + client.name + '.' }]);
             }
-          } else if (call.name === 'register_loan') {
-            try {
-              console.log('Registering loan via AI:', call.args);
-              await onAddLoan(call.args);
-              const client = data.clients.find(c => c.id === call.args.clientId);
-              setMessages(prev => [...prev, { role: 'assistant', content: `Feito! Empréstimo de R$ ${call.args.amount} cadastrado para ${client?.name || 'o cliente'}.` }]);
-            } catch (err) {
-              console.error('Error in register_loan tool:', err);
-              setMessages(prev => [...prev, { role: 'assistant', content: `Tive um probleminha ao tentar cadastrar o empréstimo: ${(err as any).message}` }]);
-            }
+          } catch (err: any) {
+            setMessages(prev => [...prev, { role: 'assistant', content: 'Problema ao cadastrar emprestimo: ' + err.message }]);
           }
         }
       } else {
-        const text = response.text || "Desculpe, não consegui processar sua solicitação.";
-        setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: textPart || 'Nao consegui processar.' }]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI Error:', error);
-      setMessages(prev => [...prev, { role: 'assistant', content: "Erro ao conectar com a inteligência artificial." }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Erro: ' + (error?.message || 'falha na conexao').slice(0, 150) }]);
     } finally {
       setLoading(false);
     }
   };
 
 
+
   return (
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-20 md:bottom-6 right-6 w-14 h-14 bg-emerald-500 text-white rounded-full shadow-lg shadow-emerald-500/40 flex items-center justify-center hover:scale-110 transition-all z-40"
+        className="fixed bottom-20 md:bottom-6 right-6 w-14 h-14 bg-gold-500 text-white rounded-full shadow-lg shadow-gold-500/40 flex items-center justify-center hover:scale-110 transition-all z-40"
       >
         <Bot size={28} />
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 md:inset-auto md:bottom-24 md:right-6 md:w-96 md:h-[600px] bg-[#0a1629] border border-white/10 shadow-2xl rounded-t-[32px] md:rounded-[32px] flex flex-col z-50 animate-in slide-in-from-bottom-10">
+        <>
+          <div
+            className="fixed inset-0 bg-black/60 z-40"
+            onClick={() => setIsOpen(false)}
+          />
+          <div className="fixed inset-x-3 bottom-3 top-20 md:inset-auto md:bottom-20 md:right-6 md:w-96 md:h-[580px] bg-[#0a1629] border border-white/10 shadow-2xl rounded-[24px] flex flex-col z-50 animate-in slide-in-from-bottom-10">
+          <div className="flex justify-center pt-3 pb-1 md:hidden">
+            <div className="w-10 h-1 bg-white/20 rounded-full"></div>
+          </div>
           {errorMessage && (
             <div className="absolute top-0 left-0 right-0 z-[60] px-4 -translate-y-full pb-2 animate-in slide-in-from-bottom-2">
               <div className="bg-red-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase italic text-center shadow-lg border border-white/20">
@@ -265,19 +282,31 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ data, onAddClient, onAddLoan 
               </div>
             </div>
           )}
-          <div className="p-6 border-b border-white/5 flex items-center justify-between bg-emerald-500/5">
+          <div className="p-6 border-b border-white/5 flex items-center justify-between bg-gold-500/5">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-500 rounded-xl text-white">
+              <div className="p-2 bg-gold-500 rounded-xl text-white">
                 <Bot size={20} />
               </div>
               <div>
                 <h3 className="text-sm font-black italic text-white uppercase">CRED</h3>
-                <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Online</p>
+                <p className="text-[10px] text-gold-400 font-bold uppercase tracking-widest">Online</p>
               </div>
             </div>
-            <button onClick={() => setIsOpen(false)} className="text-white/20 hover:text-white transition-all p-2">
-              <X size={20} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  setMessages([{ role: 'assistant', content: 'E ai! Tudo certo? Sou o Cred. Como posso ajudar com sua carteira hoje?' }]);
+                  localStorage.removeItem('cred_chat_history');
+                }}
+                className="text-white/40 hover:text-red-400 transition-all p-2"
+                title="Limpar conversa"
+              >
+                <Trash2 size={16} />
+              </button>
+              <button onClick={() => setIsOpen(false)} className="text-white/70 hover:text-white transition-all p-2" title="Fechar">
+                <X size={22} />
+              </button>
+            </div>
           </div>
 
           <div 
@@ -288,7 +317,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ data, onAddClient, onAddLoan 
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] p-4 rounded-2xl text-sm font-medium leading-relaxed ${
                   msg.role === 'user' 
-                    ? 'bg-emerald-500 text-white rounded-tr-none' 
+                    ? 'bg-gold-500 text-white rounded-tr-none' 
                     : 'bg-white/5 text-white/80 rounded-tl-none border border-white/5'
                 }`}>
                   {msg.content}
@@ -299,22 +328,22 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ data, onAddClient, onAddLoan 
               <div className="flex justify-start">
                 <div className="bg-white/5 p-4 rounded-2xl rounded-tl-none border border-white/5">
                   <div className="flex gap-1">
-                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce"></div>
-                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                    <div className="w-1.5 h-1.5 bg-gold-500 rounded-full animate-bounce"></div>
+                    <div className="w-1.5 h-1.5 bg-gold-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                    <div className="w-1.5 h-1.5 bg-gold-500 rounded-full animate-bounce [animation-delay:0.4s]"></div>
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="p-6 border-t border-white/5">
+          <div className="px-4 pt-2 pb-4 border-t border-white/5">
             <div className="flex gap-2">
               <button
                 onClick={toggleListening}
                 className={`p-4 rounded-2xl flex items-center justify-center transition-all ${
-                  isListening 
-                    ? 'bg-red-500 text-white animate-pulse' 
+                  isListening
+                    ? 'bg-red-500 text-white animate-pulse'
                     : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10'
                 }`}
                 title={isListening ? "Parar de ouvir" : "Falar com o Cred"}
@@ -328,19 +357,20 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ data, onAddClient, onAddLoan 
                   onChange={(e) => setInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSend()}
                   placeholder={isListening ? "Ouvindo..." : "Pergunte algo..."}
-                  className={`w-full bg-black/20 border border-white/5 rounded-2xl py-4 pl-4 pr-14 text-sm font-bold text-white focus:border-emerald-500/50 outline-none transition-all ${isListening ? 'border-emerald-500/50 ring-2 ring-emerald-500/20' : ''}`}
+                  className={`w-full bg-black/20 border border-white/5 rounded-2xl py-4 pl-4 pr-14 text-sm font-bold text-white focus:border-gold-500/50 outline-none transition-all ${isListening ? 'border-gold-500/50 ring-2 ring-gold-500/20' : ''}`}
                 />
                 <button
                   onClick={handleSend}
                   disabled={loading || !input.trim()}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-400 transition-all disabled:opacity-50"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-gold-500 text-white rounded-xl hover:bg-gold-400 transition-all disabled:opacity-50"
                 >
                   <Send size={18} />
                 </button>
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        </>
       )}
     </>
   );

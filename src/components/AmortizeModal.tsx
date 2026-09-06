@@ -11,6 +11,12 @@ interface AmortizeModalProps {
 }
 
 const AmortizeModal: React.FC<AmortizeModalProps> = ({ loan, client, onCancel, onConfirm }) => {
+  // No parcelado o saldo do contrato nao e abatido parcela a parcela, entao o que
+  // realmente falta de capital e a soma das parcelas ainda pendentes.
+  const saldoAtual = loan.loanType === 'installments' && loan.installments && loan.installments.length > 0
+    ? loan.installments.filter(i => i.status === 'pendente').reduce((acc, i) => acc + i.capitalValue, 0)
+    : loan.amount;
+
   const [amount, setAmount] = useState('0,00');
   const [date, setDate] = useState(isoToBr(getBrTodayISO()));
   const [isSaving, setIsSaving] = useState(false);
@@ -61,31 +67,31 @@ const AmortizeModal: React.FC<AmortizeModalProps> = ({ loan, client, onCancel, o
         <div className="space-y-6">
           <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
             <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Saldo Atual</p>
-            <p className="text-xl font-black text-white italic">{formatCurrency(loan.amount)}</p>
+            <p className="text-xl font-black text-white italic">{formatCurrency(saldoAtual)}</p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-emerald-400 uppercase tracking-widest ml-4">Valor para Amortizar</label>
+            <label className="text-[10px] font-black text-gold-400 uppercase tracking-widest ml-4">Valor para Amortizar</label>
             <div className="relative">
               <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
               <input
                 type="text"
                 value={amount}
                 onChange={(e) => setAmount(formatToInputMask(parseBrazilianNumber(e.target.value)))}
-                className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-white focus:border-emerald-500/50 outline-none transition-all"
+                className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-white focus:border-gold-500/50 outline-none transition-all"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-emerald-400 uppercase tracking-widest ml-4">Data do Pagamento</label>
+            <label className="text-[10px] font-black text-gold-400 uppercase tracking-widest ml-4">Data do Pagamento</label>
             <div className="relative">
               <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
               <input
                 type="text"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-white focus:border-emerald-500/50 outline-none transition-all"
+                className="w-full bg-black/20 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold text-white focus:border-gold-500/50 outline-none transition-all"
                 placeholder="DD-MM-YYYY"
               />
             </div>
@@ -94,7 +100,7 @@ const AmortizeModal: React.FC<AmortizeModalProps> = ({ loan, client, onCancel, o
           <button
             onClick={handleConfirm}
             disabled={isSaving}
-            className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-white font-black italic uppercase rounded-2xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full py-4 bg-gold-500 hover:bg-gold-400 text-white font-black italic uppercase rounded-2xl shadow-lg shadow-gold-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <CheckCircle size={18} />
             {isSaving ? 'Processando...' : 'Confirmar Amortização'}
