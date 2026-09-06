@@ -7,13 +7,12 @@ interface AddCapitalModalProps {
   loan: Loan;
   client: Client;
   onCancel: () => void;
-  onConfirm: (amount: number, date: string, modo?: 'mesmas' | 'mais') => Promise<void>;
+  onConfirm: (amount: number, date: string, quantidadeParcelas?: number) => Promise<void>;
 }
 
 const AddCapitalModal: React.FC<AddCapitalModalProps> = ({ loan, client, onCancel, onConfirm }) => {
   const [amount, setAmount] = useState('0,00');
   const [date, setDate] = useState(isoToBr(getBrTodayISO()));
-  const [modo, setModo] = useState<'mesmas' | 'mais'>('mesmas');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -34,13 +33,26 @@ const AddCapitalModal: React.FC<AddCapitalModalProps> = ({ loan, client, onCance
   const jurosPorParcela = semanal ? (novoCapital * taxaMensal) / 4 : novoCapital * taxaMensal;
 
   const qtdMesmas = pendentes.length;
-  const parcelaMesmas = qtdMesmas > 0 ? novoCapital / qtdMesmas + jurosPorParcela : 0;
-
   const capitalPorParcelaAtual = qtdMesmas > 0 ? capitalPendente / qtdMesmas : 0;
-  const qtdMais = capitalPorParcelaAtual > 0
-    ? Math.max(qtdMesmas, Math.round(novoCapital / capitalPorParcelaAtual))
+  const qtdMesmaParcela = capitalPorParcelaAtual > 0
+    ? Math.max(1, Math.round(novoCapital / capitalPorParcelaAtual))
     : qtdMesmas;
-  const parcelaMais = qtdMais > 0 ? novoCapital / qtdMais + jurosPorParcela : 0;
+
+  // O operador escolhe livremente em quantas parcelas quer dividir; as duas
+  // sugestoes abaixo sao so atalhos.
+  const [qtdParcelas, setQtdParcelas] = useState(qtdMesmas || 1);
+  const qtdValida = Math.max(1, Math.min(120, qtdParcelas || 1));
+  const capitalPorParcela = novoCapital / qtdValida;
+  const parcelaEscolhida = capitalPorParcela + jurosPorParcela;
+
+  const unidade = semanal ? 'semana' : 'mês';
+  const unidadePlural = semanal ? 'semanas' : 'meses';
+  const diferenca = qtdValida - qtdMesmas;
+  const textoDuracao = diferenca === 0
+    ? 'termina na data que já estava marcada'
+    : diferenca > 0
+      ? `estica o contrato em ${diferenca} ${diferenca === 1 ? unidade : unidadePlural}`
+      : `encurta o contrato em ${-diferenca} ${-diferenca === 1 ? unidade : unidadePlural}`;
 
   useEffect(() => {
     if (errorMessage) {
@@ -56,7 +68,7 @@ const AddCapitalModal: React.FC<AddCapitalModalProps> = ({ loan, client, onCance
     setIsSaving(true);
     setErrorMessage(null);
     try {
-      await onConfirm(numericAmount, date, modo);
+      await onConfirm(numericAmount, date, parcelado ? qtdValida : undefined);
     } catch (err: any) {
       setErrorMessage(err.message || "Erro ao adicionar capital.");
       setIsSaving(false);
@@ -94,33 +106,60 @@ const AddCapitalModal: React.FC<AddCapitalModalProps> = ({ loan, client, onCance
           </div>
 
           {parcelado && valorNovo > 0 && (
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-gold-400 uppercase tracking-widest ml-4">Como fica o contrato</label>
-              <p className="text-[9px] font-bold text-white/30 ml-4 -mt-1">
-                Nova dívida: {formatCurrency(novoCapital)} de capital · juros {formatCurrency(jurosPorParcela)} por parcela
-              </p>
-
-              <button
-                type="button"
-                onClick={() => setModo('mesmas')}
-                className={`w-full p-4 rounded-2xl border text-left transition-all ${modo === 'mesmas' ? 'bg-gold-500/15 border-gold-500/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
-              >
-                <p className={`text-[9px] font-black uppercase tracking-widest italic ${modo === 'mesmas' ? 'text-gold-400' : 'text-white/40'}`}>Mesma quantidade</p>
-                <p className="text-lg font-black text-white tracking-tighter">{qtdMesmas}x de {formatCurrency(parcelaMesmas)}</p>
-                <p className="text-[9px] font-bold text-white/25">termina na data que já estava marcada</p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setModo('mais')}
-                className={`w-full p-4 rounded-2xl border text-left transition-all ${modo === 'mais' ? 'bg-gold-500/15 border-gold-500/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
-              >
-                <p className={`text-[9px] font-black uppercase tracking-widest italic ${modo === 'mais' ? 'text-gold-400' : 'text-white/40'}`}>Mais parcelas</p>
-                <p className="text-lg font-black text-white tracking-tighter">{qtdMais}x de {formatCurrency(parcelaMais)}</p>
-                <p className="text-[9px] font-bold text-white/25">
-                  {qtdMais > qtdMesmas ? `estica o contrato em ${qtdMais - qtdMesmas} ${semanal ? 'semana' : 'mês'}${qtdMais - qtdMesmas > 1 ? (semanal ? 's' : 'es') : ''}` : 'mesma duração'}
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-black text-gold-400 uppercase tracking-widest ml-4">Como fica o contrato</label>
+                <p className="text-[9px] font-bold text-white/30 ml-4 mt-1">
+                  Nova dívida: {formatCurrency(novoCapital)} de capital · juros {formatCurrency(jurosPorParcela)} por parcela
                 </p>
-              </button>
+              </div>
+
+              <div className="flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-2xl">
+                <button
+                  type="button"
+                  onClick={() => setQtdParcelas(Math.max(1, qtdValida - 1))}
+                  className="w-11 h-11 shrink-0 rounded-xl bg-white/10 hover:bg-white/20 text-xl font-black text-white active:scale-95 transition-all"
+                >−</button>
+                <div className="flex-1 text-center min-w-0">
+                  <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em] italic mb-1">Em quantas parcelas</p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={qtdParcelas}
+                    onChange={(e) => {
+                      const so = e.target.value.replace(/\D/g, '');
+                      setQtdParcelas(so === '' ? 1 : Math.min(120, parseInt(so, 10)));
+                    }}
+                    className="w-full bg-transparent text-center text-3xl font-black text-white tracking-tighter outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setQtdParcelas(Math.min(120, qtdValida + 1))}
+                  className="w-11 h-11 shrink-0 rounded-xl bg-white/10 hover:bg-white/20 text-xl font-black text-white active:scale-95 transition-all"
+                >+</button>
+              </div>
+
+              <div className="p-4 bg-gold-500/10 border border-gold-500/40 rounded-2xl">
+                <p className="text-2xl font-black text-gold-300 tracking-tighter">{qtdValida}x de {formatCurrency(parcelaEscolhida)}</p>
+                <p className="text-[9px] font-bold text-white/30 mt-1">
+                  capital {formatCurrency(capitalPorParcela)} + juros {formatCurrency(jurosPorParcela)} por parcela
+                </p>
+                <p className="text-[9px] font-bold text-white/25">{textoDuracao}</p>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQtdParcelas(qtdMesmas)}
+                  className={`flex-1 py-2.5 rounded-xl border text-[9px] font-black uppercase tracking-widest italic transition-all ${qtdValida === qtdMesmas ? 'bg-gold-500/20 border-gold-500/50 text-gold-300' : 'bg-white/5 border-white/10 text-white/40 hover:text-white/70'}`}
+                >Manter {qtdMesmas}x</button>
+                <button
+                  type="button"
+                  onClick={() => setQtdParcelas(qtdMesmaParcela)}
+                  className={`flex-1 py-2.5 rounded-xl border text-[9px] font-black uppercase tracking-widest italic transition-all ${qtdValida === qtdMesmaParcela ? 'bg-gold-500/20 border-gold-500/50 text-gold-300' : 'bg-white/5 border-white/10 text-white/40 hover:text-white/70'}`}
+                >Parcela de hoje: {qtdMesmaParcela}x</button>
+              </div>
             </div>
           )}
 

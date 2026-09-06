@@ -501,7 +501,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleConfirmAddCapital = async (amount: number, date: string, modo: 'mesmas' | 'mais' = 'mesmas') => {
+  const handleConfirmAddCapital = async (amount: number, date: string, quantidadeParcelas?: number) => {
     const loan = data.loans.find(l => l.id === addCapitalLoanId);
     if (!loan) return;
     try {
@@ -533,12 +533,11 @@ const App: React.FC = () => {
         const semanal = loan.installmentFrequency === 'weekly';
         const jurosPorParcela = jurosFixoPorParcela(novoCapital * taxaMensal, semanal ? 'weekly' : 'monthly');
 
-        if (pendentes.length > 0) {
-          const capitalPorParcelaAtual = capitalPendente / pendentes.length;
-          const quantidade = modo === 'mais' && capitalPorParcelaAtual > 0
-            ? Math.max(pendentes.length, Math.round(novoCapital / capitalPorParcelaAtual))
-            : pendentes.length;
+        // O operador escolhe a quantidade na tela; sem escolha, mantem as que faltam.
+        const quantidade = Math.max(1, Math.min(120, quantidadeParcelas || pendentes.length));
+        const pagas = installments.filter(i => i.loanId === loan.id && i.status === 'pago').length;
 
+        if (pendentes.length > 0) {
           const proximaData = (base: string) => semanal ? addDays(base, 7) : addMonthsPreservingDay(base, 1);
           const capitalPorParcela = novoCapital / quantidade;
           const primeiroNumero = pendentes[0].number;
@@ -567,6 +566,7 @@ const App: React.FC = () => {
         await supabaseService.updateLoan(loan.id, {
           amount: novoCapital,
           originalAmount: novoOriginal,
+          totalInstallments: pagas + quantidade,
           interestFixedAmount: Math.round(novoOriginal * taxaMensal * 100) / 100
         });
       }
