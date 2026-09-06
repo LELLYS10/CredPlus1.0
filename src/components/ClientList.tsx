@@ -137,6 +137,41 @@ const ClientList: React.FC<ClientListProps> = ({
       : `${parts[0]}/${parts[1]}/${parts[2]}`;
   };
 
+  // Cliente com mais de um contrato abre com todos fechados: a lista de parcelas
+  // de dois contratos junta vira uma parede de rolagem.
+  const [expandedLoanIds, setExpandedLoanIds] = useState<Set<string>>(new Set());
+  const toggleLoan = (id: string) => setExpandedLoanIds(prev => {
+    const proximo = new Set(prev);
+    if (proximo.has(id)) proximo.delete(id); else proximo.add(id);
+    return proximo;
+  });
+
+  // Ordem de urgencia: critico, vencido, vence hoje, vence amanha, o resto —
+  // e dentro de cada faixa, o vencimento mais proximo primeiro.
+  const prioridadeContrato = (l: Loan) => {
+    const faixa = (l as any).statusBucket;
+    if (faixa === 'critical') return 0;
+    if (faixa === 'overdue') return 1;
+    if (faixa === 'today') return 2;
+    if (faixa === 'tomorrow') return 3;
+    return 4;
+  };
+  const ordenarContratos = (lista: Loan[]) => [...lista].sort((a, b) => {
+    const dif = prioridadeContrato(a) - prioridadeContrato(b);
+    if (dif !== 0) return dif;
+    return brToIso(a.dueDate || '').localeCompare(brToIso(b.dueDate || ''));
+  });
+
+  const seloStatus = (loan: Loan) => {
+    const faixa = (loan as any).statusBucket;
+    const dias = diasDeAtraso(loan.dueDate || '');
+    if (faixa === 'critical') return { texto: `🟣 ${dias ?? 0}d`, cor: 'bg-purple-500/20 text-purple-300 border-purple-500/40' };
+    if (faixa === 'overdue') return { texto: `🔴 ${dias ?? 0}d`, cor: 'bg-red-500/20 text-red-300 border-red-500/40' };
+    if (faixa === 'today') return { texto: '🔵 hoje', cor: 'bg-blue-500/20 text-blue-300 border-blue-500/40' };
+    if (faixa === 'tomorrow') return { texto: '🟡 amanhã', cor: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40' };
+    return null;
+  };
+
   const getLoanInfo = (loan: Loan) => {
     const loanDate = loan.loanDate ? formatDateBr(loan.loanDate.split('T')[0]) : '-';
     const dueDate = loan.dueDate ? formatDateBr(loan.dueDate) : '-';
@@ -244,16 +279,50 @@ const ClientList: React.FC<ClientListProps> = ({
             </button>
                   <ClientNoteBanner client={client} onUpdateNotes={onUpdateClientNotes} compact />
                   {/* Resumo dos Empréstimos */}
-                  {cLoans.map(loan => {
+                  {ordenarContratos(cLoans).map(loan => {
                     const info = getLoanInfo(loan);
+                    const variosContratos = cLoans.length > 1;
+                    const contratoAberto = !variosContratos || expandedLoanIds.has(loan.id);
+                    const selo = seloStatus(loan);
+                    const parcelasPagas = loan.installments ? loan.installments.filter(i => i.status === 'pago').length : 0;
                     return (
-                      <div key={loan.id} className="p-3 bg-black/30 rounded-[12px] border border-white/5">
+                      <div key={loan.id} className="bg-black/30 rounded-[12px] border border-white/5 overflow-hidden">
+                        {variosContratos && (
+                          <button
+                            type="button"
+                            onClick={() => toggleLoan(loan.id)}
+                            className="w-full p-3 flex items-center justify-between gap-2 hover:bg-white/5 transition-colors text-left"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`text-white/25 text-[9px] transition-transform shrink-0 ${contratoAberto ? 'rotate-90' : ''}`}>▶</span>
+                              <span className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase italic border shrink-0 ${tipoContratoInfo(loan).cor}`}>
+                                {tipoContratoInfo(loan).label}
+                              </span>
+                              <span className="text-[9px] text-white/30 truncate">
+                                VENC: <span className="text-yellow-400">{info.dueDate}</span>
+                                {loan.installments && loan.installments.length > 0 && (
+                                  <span className="text-white/25"> · {parcelasPagas}/{loan.installments.length}</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {selo && (
+                                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black tabular-nums border ${selo.cor}`}>{selo.texto}</span>
+                              )}
+                              <span className="text-gold-400 font-bold text-xs">{formatCurrency(loan.amount)}</span>
+                            </div>
+                          </button>
+                        )}
+                        {contratoAberto && (
+                        <div className={variosContratos ? 'px-3 pb-3' : 'p-3'}>
                         {/* Selo do tipo de contrato */}
-                        <div className="mb-2">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[7px] font-black uppercase italic border ${tipoContratoInfo(loan).cor}`}>
-                            {tipoContratoInfo(loan).label}
-                          </span>
-                        </div>
+                        {!variosContratos && (
+                          <div className="mb-2">
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[7px] font-black uppercase italic border ${tipoContratoInfo(loan).cor}`}>
+                              {tipoContratoInfo(loan).label}
+                            </span>
+                          </div>
+                        )}
                         {/* Linha 1: Data Emp | Venc Juros | Capital */}
                         <div className="flex justify-between items-center text-[9px] mb-2">
                           <div className="flex gap-3">
@@ -317,10 +386,12 @@ const ClientList: React.FC<ClientListProps> = ({
                             })}
                           </div>
                         )}
+                        </div>
+                        )}
                       </div>
                     );
                   })}
-                  
+
                   {/* Ações */}
                   <div className="flex gap-2 pt-2">
                     <button onClick={(e) => { e.stopPropagation(); setHistoryClientId(client.id); }} className="flex-1 py-2 bg-gold-500/10 text-gold-400 rounded-lg text-[9px] font-bold uppercase border border-gold-500/20 hover:bg-gold-500 hover:text-white transition-all">HISTÓRICO</button>
