@@ -6,7 +6,7 @@ O painel CredPlus continua normal, com centavos. O banco de dados também não r
 
 No Evolution, os valores exibidos sobem para o próximo múltiplo de R$ 5. Assim, R$ 45,60 aparece como R$ 50,00, R$ 298,50 aparece como R$ 300,00 e R$ 75,00 permanece R$ 75,00.
 
-As consultas são apresentadas em blocos no formato de extrato, com categoria, clientes, valores e total. Consultas separadas por ponto e vírgula geram um bloco por consulta. Ações de pagamento, cadastro e alteração continuam exigindo um comando por vez.
+As consultas são apresentadas em blocos no formato de extrato, com categoria, clientes, valores e total. Consultas separadas por ponto e vírgula ou em linhas separadas geram um bloco por consulta. Ações de pagamento, cadastro e alteração continuam exigindo um comando por vez.
 
 Implementação de produção:
 
