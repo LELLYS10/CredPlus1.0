@@ -36,23 +36,23 @@ export default function Assistant() {
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
       {isOpen && (
         <div className="bg-white rounded-lg shadow-xl mb-4 w-80 h-96 border border-gray-200 flex flex-col overflow-hidden">
-          <div className="bg-emerald-600 p-3 text-white flex justify-between">
+          <div className="bg-gold-600 p-3 text-white flex justify-between">
             <h3 className="font-bold">Assistente</h3>
             <button onClick={() => setIsOpen(false)}>X</button>
           </div>
           <div className="flex-1 p-3 overflow-y-auto bg-gray-50 flex flex-col gap-2">
             {chat.map((msg, i) => (
-              <div key={i} className={`p-2 rounded-lg max-w-[85%] ${msg.role === 'user' ? 'bg-blue-100 self-end' : 'bg-emerald-100 self-start'}`}>{msg.text}</div>
+              <div key={i} className={`p-2 rounded-lg max-w-[85%] ${msg.role === 'user' ? 'bg-blue-100 self-end' : 'bg-gold-100 self-start'}`}>{msg.text}</div>
             ))}
             {carregando && <div className="text-xs text-gray-500">Digitando...</div>}
           </div>
           <form onSubmit={enviarMensagem} className="p-2 bg-white border-t flex gap-2">
             <input type="text" value={mensagem} onChange={(e) => setMensagem(e.target.value)} className="flex-1 border rounded p-1 text-sm outline-none" placeholder="Digite..." />
-            <button type="submit" className="bg-emerald-600 text-white px-3 py-1 rounded text-sm">Enviar</button>
+            <button type="submit" className="bg-gold-600 text-white px-3 py-1 rounded text-sm">Enviar</button>
           </form>
         </div>
       )}
-      <button onClick={() => setIsOpen(!isOpen)} className="bg-emerald-500 text-white rounded-full p-4 shadow-lg text-2xl">🤖</button>
+      <button onClick={() => setIsOpen(!isOpen)} className="bg-gold-500 text-white rounded-full p-4 shadow-lg text-2xl">🤖</button>
     </div>
   );
 }

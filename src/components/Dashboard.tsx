@@ -99,6 +99,35 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange, onOpenClien
     }
   }, [data.payments, reportPeriod]);
 
+  // Previsão de juros: soma o juro esperado dos contratos com vencimento dentro do
+  // mês corrente. Recorrente usa o pendente do ciclo atual (interestFixedAmount menos
+  // o que já foi pago nesse ciclo); parcelado soma o interestValue das parcelas ainda
+  // pendentes cujo vencimento cai neste mês.
+  const previsaoJurosMes = React.useMemo(() => {
+    const ativos = (data.loans || []).filter(l => l.status !== 'paid' && (l as any).statusBucket !== 'paid');
+    return ativos.reduce((acc, l) => {
+      if (l.loanType === 'installments' && l.installments && l.installments.length > 0) {
+        return acc + l.installments
+          .filter(i => i.status === 'pendente' && isThisMonth(i.dueDate))
+          .reduce((soma, i) => soma + (i.interestValue || 0), 0);
+      }
+      if (isThisMonth(l.dueDate)) {
+        return acc + Math.max(0, (l.interestFixedAmount || 0) - (l.jurosPagoNoCiclo || 0));
+      }
+      return acc;
+    }, 0);
+  }, [data.loans]);
+
+  // Falta receber = previsão do mês menos o que já entrou de juros no mês, sempre
+  // na base mensal (independe do toggle Hoje/Mês/Geral, que só afeta o card recebido).
+  const jurosRecebidosNoMes = React.useMemo(() => {
+    return (data.payments || [])
+      .filter(p => (p.type === 'interest' || p.type === 'surcharge') && isThisMonth(p.date))
+      .reduce((acc, p) => acc + p.amount, 0);
+  }, [data.payments]);
+
+  const faltaReceberMes = Math.max(0, previsaoJurosMes - jurosRecebidosNoMes);
+
     const getClientName = (id: string) => data.clients.find(c => c.id === id)?.name || 'Cliente';
 
   const generateMonthlyPdf = async () => {
@@ -223,6 +252,26 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onFilterChange, onOpenClien
           <span className="text-[7px] md:text-[8px] font-black text-gold-400/50 uppercase tracking-[0.3em] italic leading-tight">Capital Recebido · {rotuloPeriodo}</span>
         </div>
         <span className="text-sm md:text-base font-black text-white tracking-tighter shrink-0">{formatCurrency(displayCapitalRecebido)}</span>
+      </div>
+
+      <div className="flex bg-white/5 border border-white/5 rounded-2xl px-4 py-2.5 items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="bg-gold-500/10 p-1.5 rounded-lg border border-gold-500/20">
+            <svg className="w-3.5 h-3.5 text-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          </div>
+          <span className="text-[7px] md:text-[8px] font-black text-gold-400/50 uppercase tracking-[0.3em] italic leading-tight">Previsão de Juros · No Mês</span>
+        </div>
+        <span className="text-sm md:text-base font-black text-white tracking-tighter shrink-0">{formatCurrency(previsaoJurosMes)}</span>
+      </div>
+
+      <div className="flex bg-white/5 border border-white/5 rounded-2xl px-4 py-2.5 items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="bg-gold-500/10 p-1.5 rounded-lg border border-gold-500/20">
+            <svg className="w-3.5 h-3.5 text-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <span className="text-[7px] md:text-[8px] font-black text-gold-400/50 uppercase tracking-[0.3em] italic leading-tight">Falta Receber · No Mês</span>
+        </div>
+        <span className={`text-sm md:text-base font-black tracking-tighter shrink-0 ${faltaReceberMes > 0 ? 'text-orange-400' : 'text-emerald-400'}`}>{formatCurrency(faltaReceberMes)}</span>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
