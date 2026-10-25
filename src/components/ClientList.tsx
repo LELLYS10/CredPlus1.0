@@ -19,6 +19,7 @@ interface ClientListProps {
   onAmortize: (loanId: string) => void;
   onAddCapital: (loanId: string) => void;
   onEditLoan: (loanId: string) => void;
+  onDeleteLoan: (loanId: string) => void;
   onUpdateInstallmentDate: (instId: string, newDate: string) => Promise<void>;
   onDeleteClient: (clientId: string) => void;
   onDeletePayment?: (paymentId: string, loanId: string, amount: number, type: string, date: string) => Promise<void>;
@@ -51,7 +52,7 @@ const tipoContratoInfo = (loan: Loan) => {
 };
 
 const ClientList: React.FC<ClientListProps> = ({
-  clients, loans, payments, activeFilter, searchTerm, setSearchTerm, setActiveFilter, onAddLoan, onPayInterest, onPayInstallment, onAmortize, onAddCapital, onEditLoan, onUpdateInstallmentDate, onDeleteClient, onDeletePayment, onUpdateClientNotes, focusClientId
+  clients, loans, payments, activeFilter, searchTerm, setSearchTerm, setActiveFilter, onAddLoan, onPayInterest, onPayInstallment, onAmortize, onAddCapital, onEditLoan, onDeleteLoan, onUpdateInstallmentDate, onDeleteClient, onDeletePayment, onUpdateClientNotes, focusClientId
 }) => {
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
   const [historyClientId, setHistoryClientId] = useState<string | null>(null);
@@ -336,6 +337,7 @@ const ClientList: React.FC<ClientListProps> = ({
                         <div className="flex justify-between items-center">
                           <span className="text-white/40 text-xs font-bold">{formatCurrency(loan.amount)}</span>
                           <div className="flex gap-2 items-center">
+                            <button onClick={() => onDeleteLoan(loan.id)} title="Excluir este contrato" className="px-2 py-1.5 bg-red-500/10 rounded-lg text-[10px] text-red-300/70 hover:text-red-200">🗑️</button>
                             <button onClick={() => onEditLoan(loan.id)} className="px-2.5 py-1.5 bg-white/10 rounded-lg text-[8px] font-bold uppercase text-white/50">EDITAR</button>
                             <button onClick={() => onAddCapital(loan.id)} className="px-2.5 py-1.5 bg-white/10 rounded-lg text-[8px] font-bold uppercase text-white/50">+ CAPITAL</button>
                             {loan.loanType === 'recurrent' ? (

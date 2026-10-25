@@ -67,6 +67,7 @@ const App: React.FC = () => {
   // Limpeza total: 0 = fechado, 1 = aviso do que sera apagado, 2 = confirmacao final
   const [clearStep, setClearStep] = useState<0 | 1 | 2>(0);
   const [clientToDelete, setClientToDelete] = useState<string | null>(null);
+  const [loanToDelete, setLoanToDelete] = useState<string | null>(null);
   const [globalErrorMessage, setGlobalErrorMessage] = useState<string | null>(null);
   const [avisoParcial, setAvisoParcial] = useState<{ cliente: string; falta: number } | null>(null);
   
@@ -976,6 +977,7 @@ const App: React.FC = () => {
             onAmortize={(lid) => setAmortizeLoanId(lid)}
             onAddCapital={(lid) => setAddCapitalLoanId(lid)}
             onEditLoan={(lid) => setEditLoanId(lid)}
+            onDeleteLoan={(lid) => setLoanToDelete(lid)}
             onDeleteClient={(cid) => { setClientToDelete(cid); setDeleteConfirmOpen(true); }}
             onDeletePayment={handleDeletePayment}
             onUpdateClientNotes={handleUpdateClientNotes}
@@ -1133,6 +1135,30 @@ const App: React.FC = () => {
           />
         ) : null;
       })()}
+
+      <ConfirmModal
+        isOpen={!!loanToDelete}
+        title="Excluir Contrato?"
+        message={(() => {
+          const l = data.loans.find(x => x.id === loanToDelete);
+          const c = l ? data.clients.find(x => x.id === l.clientId) : undefined;
+          const nome = c ? c.name.toUpperCase() : "ESTE CLIENTE";
+          const valor = l ? Number(l.amount || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
+          return `${nome}\n\nSó este contrato de ${valor} será apagado, junto com as parcelas e pagamentos dele. O cliente e os outros contratos continuam.\n\nEsta ação não pode ser desfeita.`;
+        })()}
+        isDanger={true}
+        onCancel={() => setLoanToDelete(null)}
+        onConfirm={async () => {
+          try {
+            if (loanToDelete) await supabaseService.deleteLoan(loanToDelete);
+          } catch (err: any) {
+            setGlobalErrorMessage("Erro ao excluir contrato: " + (err.message || String(err)));
+          } finally {
+            setLoanToDelete(null);
+            refreshAppData();
+          }
+        }}
+      />
 
       <ConfirmModal
         isOpen={deleteConfirmOpen && !!clientToDelete}
