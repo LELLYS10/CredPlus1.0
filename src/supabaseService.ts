@@ -287,16 +287,16 @@ export const supabaseService = {
   // Apaga UM contrato (e suas parcelas/pagamentos). O cliente e os outros
   // contratos dele continuam intactos.
   deleteLoan: async (loanId: string) => {
-    const { error: pError } = await supabase.from(payments).delete().eq(loan_id, loanId);
+    const { error: pError } = await supabase.from('payments').delete().eq('loan_id', loanId);
     if (pError) throw pError;
 
-    const { error: iError } = await supabase.from(installments).delete().eq(loan_id, loanId);
+    const { error: iError } = await supabase.from('installments').delete().eq('loan_id', loanId);
     if (iError) throw iError;
 
-    const { error: lError } = await supabase.from(loans).delete().eq(id, loanId);
+    const { error: lError } = await supabase.from('loans').delete().eq('id', loanId);
     if (lError) throw lError;
 
-    mirrorToSheets(loans,DELETE,{ id: loanId });
+    mirrorToSheets('loans','DELETE',{ id: loanId });
   },
   deleteClient: async (id: string) => {
     console.log('supabaseService: deleteClient called for id:', id);
