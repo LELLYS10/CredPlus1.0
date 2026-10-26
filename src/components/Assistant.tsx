@@ -1,4 +1,3 @@
-cat << 'EOF' > /root/CredPlus1.0/src/components/Assistant.tsx
 import React, { useState } from 'react';
 
 export default function Assistant() {
@@ -56,5 +55,3 @@ export default function Assistant() {
     </div>
   );
 }
-EOF
-pm2 restart credplus
